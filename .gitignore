@@ -1,0 +1,9 @@
+debug/
+target/
+**/*.rs.bk
+
+# For MSVC builds of rustc
+*.pdb
+
+# In case anybody wants to use RustRover (there are better options, please!)
+.idea/
