@@ -89,14 +89,16 @@ impl Scanner {
     fn scan_token(&mut self) {
         if let Some(c) = self.next_char() {
             match c {
-                '(' => self.add_token(TokenType::LeftParen),
-                ')' => self.add_token(TokenType::RightParen),
-                '[' => self.add_token(TokenType::LeftBracket),
-                ']' => self.add_token(TokenType::RightBracket),
+                '(' => {
+                    self.parse_subshell_expansion();
+                }
+                // ')' => self.add_token(TokenType::RightParen),
+                // '[' => self.add_token(TokenType::LeftBracket),
+                // ']' => self.add_token(TokenType::RightBracket),
                 '{' => {
                     self.parse_range_expression();
                 }
-                '}' => self.add_token(TokenType::RightBrace),
+                // '}' => self.add_token(TokenType::RightBrace),
                 ',' => self.add_token(TokenType::Comma),
                 '+' => self.add_token(TokenType::Plus),
                 ';' => self.add_token(TokenType::Semicolon),
