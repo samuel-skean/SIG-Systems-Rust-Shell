@@ -28,6 +28,7 @@ pub enum TokenType {
     SingleQuotedString(String), // x
     VariableExpansion(String),
     SubshellExpansion(Option<Vec<Token>>),
+    ProcessSubstitution(Option<Vec<Token>>),
     Integer(i64),
     Float(f32),
     RangeExpressionNumeric(i64, i64, Option<i64>),
@@ -118,7 +119,16 @@ impl Scanner {
                         self.emit_error(" expand what?");
                     }
                 }
-                '<' => self.add_token(TokenType::InputRedirect),
+                '<' => {
+                    if self.peek_next().is_some_and(|c| c == '(') {
+                        self.increment(); // look at '('
+                        self.start = self.current;
+                        let expansion = self.parse_expansion();
+                        self.add_token(TokenType::ProcessSubstitution(expansion));
+                    } else {
+                        self.add_token(TokenType::InputRedirect)
+                    }
+                }
                 '\\' => self.add_token(TokenType::Backslash),
                 '/' => self.add_token(TokenType::Forwardslash),
                 '\t' | '\n' | 'r' | ' ' => {
@@ -304,7 +314,40 @@ impl Scanner {
             self.source[self.start..self.current + 1].to_string(),
         ));
     }
+    fn parse_expansion(&mut self) -> Option<Vec<Token>> {
+        if let Some(pair_close) = get_pair_match(self.peek().unwrap()) {
+            let pair_open = self.peek().unwrap();
+            let mut paren_stack: Vec<char> = vec![];
 
+            while self.peek().is_some() {
+                if self.peek().unwrap() == pair_open {
+                    paren_stack.push(pair_open);
+                } else if self.peek().unwrap() == pair_close {
+                    if let Some(&top) = paren_stack.last() {
+                        if top == pair_open {
+                            paren_stack.pop();
+                        }
+                    }
+                }
+                if paren_stack.is_empty() {
+                    break;
+                }
+
+                self.increment();
+            }
+            if !paren_stack.is_empty() {
+                self.emit_error(" unmatched pair");
+                None
+            } else {
+                println!("{}", self.source[self.start + 1..self.current].to_string());
+                let scanner = Scanner::new(self.source[self.start + 1..self.current].to_string());
+                self.increment();
+                scanner.get_tokens()
+            }
+        } else {
+            None
+        }
+    }
     fn parse_subshell_expansion(&mut self) {
         if let Some(pair_close) = get_pair_match(self.peek().unwrap()) {
             let pair_open = self.peek().unwrap();
@@ -1020,6 +1063,55 @@ mod test {
         let scan = Scanner::new("$_1_".to_string());
         let expected = vec![
             Token::new(TokenType::VariableExpansion("_1_".to_string())),
+            Token::new(TokenType::EOF),
+        ];
+        assert_eq!(Some(expected), scan.get_tokens());
+    }
+
+    #[test]
+    fn proces_substitution() {
+        let scan = Scanner::new("<(abc)".to_string());
+        let one = vec![
+            Token::new(TokenType::Word("abc".to_string())),
+            Token::new(TokenType::EOF),
+        ];
+        let expected = vec![
+            Token::new(TokenType::ProcessSubstitution(Some(one))),
+            Token::new(TokenType::EOF),
+        ];
+        assert_eq!(Some(expected), scan.get_tokens());
+        let scan = Scanner::new(
+            "sort -nr -k 5 <(ls -l /bin) <(ls -l /usr/bin) <(ls -l /sbin)".to_string(),
+        );
+        let one = vec![
+            Token::new(TokenType::Word("ls".to_string())),
+            Token::new(TokenType::Word("-l".to_string())),
+            Token::new(TokenType::Forwardslash),
+            Token::new(TokenType::Word("bin".to_string())),
+            Token::new(TokenType::EOF),
+        ];
+        let two = vec![
+            Token::new(TokenType::Word("ls".to_string())),
+            Token::new(TokenType::Word("-l".to_string())),
+            Token::new(TokenType::Forwardslash),
+            Token::new(TokenType::Word("usr/bin".to_string())),
+            Token::new(TokenType::EOF),
+        ];
+        let three = vec![
+            Token::new(TokenType::Word("ls".to_string())),
+            Token::new(TokenType::Word("-l".to_string())),
+            Token::new(TokenType::Forwardslash),
+            Token::new(TokenType::Word("sbin".to_string())),
+            Token::new(TokenType::EOF),
+        ];
+        let expected = vec![
+            Token::new(TokenType::Word("sort".to_string())),
+            Token::new(TokenType::Word("-nr".to_string())),
+            Token::new(TokenType::Word("-k".to_string())),
+            Token::new(TokenType::Integer(5)),
+            Token::new(TokenType::ProcessSubstitution(Some(one))),
+            Token::new(TokenType::ProcessSubstitution(Some(two))),
+            Token::new(TokenType::ProcessSubstitution(Some(three))),
             Token::new(TokenType::EOF),
         ];
         assert_eq!(Some(expected), scan.get_tokens());
