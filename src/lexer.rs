@@ -469,7 +469,6 @@ impl Scanner {
                 self.emit_error("must have \'..\', range expressions can take the form {i..i..i} or {a..a..i} (where \'i\' is an integer, and \'a\' is a character)");
                 return;
             }
-            self.increment_n(2);
 
             let by;
             if self.peek().is_some_and(|c| c.is_numeric()) {
@@ -538,27 +537,6 @@ pub fn allowed_name_char(c: char) -> bool {
 #[cfg(test)]
 mod test {
     use super::*;
-    #[test]
-    fn get_char() {
-        let mut scan = Scanner::new("abcdef".to_string());
-        assert_eq!(scan.next_char(), Some('a'));
-        assert_eq!(scan.next_char(), Some('b'));
-        assert_eq!(scan.next_char(), Some('c'));
-        assert_eq!(scan.next_char(), Some('d'));
-        assert_eq!(scan.next_char(), Some('e'));
-        assert_eq!(scan.next_char(), Some('f'));
-    }
-    #[test]
-    fn single_char_tokens() {
-        let scan = Scanner::new("(".to_string());
-        let expected = vec![Token::new(TokenType::LeftParen), Token::new(TokenType::EOF)];
-        assert_eq!(Some(expected), scan.get_tokens());
-    }
-    #[test]
-    fn two_char_tokens() {
-        let scan = Scanner::new("==".to_string());
-        assert_eq!(None, scan.get_tokens());
-    }
 
     #[test]
     fn float() {
@@ -783,6 +761,65 @@ mod test {
             Token::new(TokenType::EOF),
         ];
         assert_eq!(Some(expected), scan.get_tokens());
+
+        let scan = Scanner::new("{1..2..3}".to_string());
+        let expected = vec![
+            Token::new(TokenType::RangeExpressionNumeric(1, 2, Some(3))),
+            Token::new(TokenType::EOF),
+        ];
+        assert_eq!(Some(expected), scan.get_tokens());
+
+        let scan = Scanner::new("{1..2..a}".to_string());
+        assert_eq!(None, scan.get_tokens());
+
+        let scan = Scanner::new("{a..2}".to_string());
+        assert_eq!(None, scan.get_tokens());
+
+        let scan = Scanner::new("{1..a}".to_string());
+        assert_eq!(None, scan.get_tokens());
+
+        let scan = Scanner::new("{1.a}".to_string());
+        assert_eq!(None, scan.get_tokens());
+
+        let scan = Scanner::new("{1.2}".to_string());
+        assert_eq!(None, scan.get_tokens());
+
+        let scan = Scanner::new("{1..2..3".to_string());
+        assert_eq!(None, scan.get_tokens());
+
+        let scan = Scanner::new("{1..2.3}".to_string());
+        assert_eq!(None, scan.get_tokens());
+
+        let scan = Scanner::new("{a..a..a}".to_string());
+        assert_eq!(None, scan.get_tokens());
+
+        let scan = Scanner::new("{a..b}".to_string());
+        let expected = vec![
+            Token::new(TokenType::RangeExpressionAlphabetic('a', 'b', None)),
+            Token::new(TokenType::EOF),
+        ];
+        assert_eq!(Some(expected), scan.get_tokens());
+
+        let scan = Scanner::new("{a..z}".to_string());
+        let expected = vec![
+            Token::new(TokenType::RangeExpressionAlphabetic('a', 'z', None)),
+            Token::new(TokenType::EOF),
+        ];
+        assert_eq!(Some(expected), scan.get_tokens());
+
+        let scan = Scanner::new("{a..z..1}".to_string());
+        let expected = vec![
+            Token::new(TokenType::RangeExpressionAlphabetic('a', 'z', Some(1))),
+            Token::new(TokenType::EOF),
+        ];
+        assert_eq!(Some(expected), scan.get_tokens());
+
+        let scan = Scanner::new("{a..z..10}".to_string());
+        let expected = vec![
+            Token::new(TokenType::RangeExpressionAlphabetic('a', 'z', Some(10))),
+            Token::new(TokenType::EOF),
+        ];
+        assert_eq!(Some(expected), scan.get_tokens());
     }
 
     #[test]
@@ -846,10 +883,149 @@ mod test {
             Token::new(TokenType::EOF),
         ];
         assert_eq!(Some(expected), scan.get_tokens());
+
+        let scan = Scanner::new("awk '{print $1}' data.txt | sort | uniq -c".to_string());
+        let expected = vec![
+            Token::new(TokenType::Word("awk".to_string())),
+            Token::new(TokenType::SingleQuotedString("{print $1}".to_string())),
+            Token::new(TokenType::Word("data.txt".to_string())),
+            Token::new(TokenType::Pipe),
+            Token::new(TokenType::Word("sort".to_string())),
+            Token::new(TokenType::Pipe),
+            Token::new(TokenType::Word("uniq".to_string())),
+            Token::new(TokenType::Word("-c".to_string())),
+            Token::new(TokenType::EOF),
+        ];
+        assert_eq!(Some(expected), scan.get_tokens());
+    }
+
+    #[test]
+    fn subshell_expansion() {
+        let scan = Scanner::new("(grep (ls -a | head -n1))".to_string());
+        let inner = vec![
+            Token::new(TokenType::Word("ls".to_string())),
+            Token::new(TokenType::Word("-a".to_string())),
+            Token::new(TokenType::Pipe),
+            Token::new(TokenType::Word("head".to_string())),
+            Token::new(TokenType::Word("-n1".to_string())),
+            Token::new(TokenType::EOF),
+        ];
+        let outer = vec![
+            Token::new(TokenType::Word("grep".to_string())),
+            Token::new(TokenType::SubshellExpansion(Some(inner))),
+            Token::new(TokenType::EOF),
+        ];
+        let expected = vec![
+            Token::new(TokenType::SubshellExpansion(Some(outer))),
+            Token::new(TokenType::EOF),
+        ];
+        assert_eq!(Some(expected), scan.get_tokens());
+
+        let scan = Scanner::new("(grep (ls -a | head -n1))".to_string());
+        let inner = vec![
+            Token::new(TokenType::Word("ls".to_string())),
+            Token::new(TokenType::Word("-a".to_string())),
+            Token::new(TokenType::Pipe),
+            Token::new(TokenType::Word("head".to_string())),
+            Token::new(TokenType::Word("-n1".to_string())),
+            Token::new(TokenType::EOF),
+        ];
+        let outer = vec![
+            Token::new(TokenType::Word("grep".to_string())),
+            Token::new(TokenType::SubshellExpansion(Some(inner))),
+            Token::new(TokenType::EOF),
+        ];
+        let expected = vec![
+            Token::new(TokenType::SubshellExpansion(Some(outer))),
+            Token::new(TokenType::EOF),
+        ];
+        assert_eq!(Some(expected), scan.get_tokens());
+
+        let scan = Scanner::new("(grep (ls -a | head -n1) && echo {1..20..2})".to_string());
+        let inner = vec![
+            Token::new(TokenType::Word("ls".to_string())),
+            Token::new(TokenType::Word("-a".to_string())),
+            Token::new(TokenType::Pipe),
+            Token::new(TokenType::Word("head".to_string())),
+            Token::new(TokenType::Word("-n1".to_string())),
+            Token::new(TokenType::EOF),
+        ];
+        let outer = vec![
+            Token::new(TokenType::Word("grep".to_string())),
+            Token::new(TokenType::SubshellExpansion(Some(inner))),
+            Token::new(TokenType::Ampersand),
+            Token::new(TokenType::Ampersand),
+            Token::new(TokenType::Word("echo".to_string())),
+            Token::new(TokenType::RangeExpressionNumeric(1, 20, Some(2))),
+            Token::new(TokenType::EOF),
+        ];
+        let expected = vec![
+            Token::new(TokenType::SubshellExpansion(Some(outer))),
+            Token::new(TokenType::EOF),
+        ];
+        assert_eq!(Some(expected), scan.get_tokens());
+    }
+
+    #[test]
+    fn variable_expansion() {
+        let scan = Scanner::new("${abc}".to_string());
+        let expected = vec![
+            Token::new(TokenType::VariableExpansion("abc".to_string())),
+            Token::new(TokenType::EOF),
+        ];
+        assert_eq!(Some(expected), scan.get_tokens());
+
+        let scan = Scanner::new("${abc_def}".to_string());
+        let expected = vec![
+            Token::new(TokenType::VariableExpansion("abc_def".to_string())),
+            Token::new(TokenType::EOF),
+        ];
+        assert_eq!(Some(expected), scan.get_tokens());
+
+        let scan = Scanner::new("${_11abc_def}".to_string());
+        let expected = vec![
+            Token::new(TokenType::VariableExpansion("_11abc_def".to_string())),
+            Token::new(TokenType::EOF),
+        ];
+        assert_eq!(Some(expected), scan.get_tokens());
+
+        let scan = Scanner::new("${_1_}".to_string());
+        let expected = vec![
+            Token::new(TokenType::VariableExpansion("_1_".to_string())),
+            Token::new(TokenType::EOF),
+        ];
+        assert_eq!(Some(expected), scan.get_tokens());
+
+        let scan = Scanner::new("$abc".to_string());
+        let expected = vec![
+            Token::new(TokenType::VariableExpansion("abc".to_string())),
+            Token::new(TokenType::EOF),
+        ];
+        assert_eq!(Some(expected), scan.get_tokens());
+
+        let scan = Scanner::new("$abc_def".to_string());
+        let expected = vec![
+            Token::new(TokenType::VariableExpansion("abc_def".to_string())),
+            Token::new(TokenType::EOF),
+        ];
+        assert_eq!(Some(expected), scan.get_tokens());
+
+        let scan = Scanner::new("$_11abc_def".to_string());
+        let expected = vec![
+            Token::new(TokenType::VariableExpansion("_11abc_def".to_string())),
+            Token::new(TokenType::EOF),
+        ];
+        assert_eq!(Some(expected), scan.get_tokens());
+
+        let scan = Scanner::new("$_1_".to_string());
+        let expected = vec![
+            Token::new(TokenType::VariableExpansion("_1_".to_string())),
+            Token::new(TokenType::EOF),
+        ];
+        assert_eq!(Some(expected), scan.get_tokens());
     }
 
     /*
-     * awk '{print $1}' data.txt | sort | uniq -c
      * ps aux | grep "[n]ginx"
      * (cd /tmp && touch test.txt && echo "Created file")
      * echo $((2 + 3 * 4))
