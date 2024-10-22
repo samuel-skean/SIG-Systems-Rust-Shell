@@ -104,13 +104,15 @@ impl Scanner {
                 ';' => self.add_token(TokenType::Semicolon),
                 '|' => self.add_token(TokenType::Pipe),
                 '$' => {
-                    if self.peek().is_some_and(|c| c == '(') {
+                    if self.peek_next().is_some_and(|c| c == '(') {
+                        self.increment_n(2); // get rid of $
                         self.parse_subshell_expansion();
-                    } else if self.peek().is_some_and(|c| c == '{') {
-                        self.increment_current(); // get rid of $
-                        self.parse_variable(); // passed will be {something}
-                        self.increment_current(); // get rid of trailing }
-                    } else if self.peek().is_some_and(|c| allowed_name_char(c)) {
+                    } else if self.peek_next().is_some_and(|c| c == '{') {
+                        self.increment_n(2); // get rid of ${
+                        self.parse_variable(); // passed will be something}
+                        self.increment(); // get rid of trailing }
+                    } else if self.peek_next().is_some_and(|c| allowed_name_char(c)) {
+                        self.increment();
                         self.parse_variable();
                     } else {
                         self.emit_error(" expand what?");
@@ -119,30 +121,36 @@ impl Scanner {
                 '<' => self.add_token(TokenType::InputRedirect),
                 '\\' => self.add_token(TokenType::Backslash),
                 '/' => self.add_token(TokenType::Forwardslash),
-                '\t' | '\n' | 'r' | ' ' => return,
+                '\t' | '\n' | 'r' | ' ' => {
+                    self.increment();
+                    return;
+                }
                 '"' => {
-                    while self.peek().is_some_and(|c| c != '"') {
-                        self.increment_current();
-                        if self.peek().is_none() {
+                    while self.peek_next().is_some_and(|c| c != '"') {
+                        self.increment();
+                        if self.peek_next().is_none() {
                             self.emit_error("Unterminated string literal");
                         }
                     }
                     self.add_token(TokenType::DoubleQuotedString(
-                        self.source[self.start + 1..self.current].to_string(),
+                        self.source[self.start + 1..self.current + 1].to_string(),
                     ));
-                    self.increment_current();
+                    // let scanner =
+                    //     Scanner::new(self.source[self.start + 1..self.current + 1].to_string());
+                    // self.add_token(TokenType::StringExpansion(scanner.get_tokens()));
+                    self.increment();
                 }
                 '\'' => {
-                    while self.peek().is_some_and(|c| c != '\'') {
-                        self.increment_current();
-                        if self.peek().is_none() {
+                    while self.peek_next().is_some_and(|c| c != '\'') {
+                        self.increment();
+                        if self.peek_next().is_none() {
                             self.emit_error("Unterminated string literal");
                         }
                     }
                     self.add_token(TokenType::SingleQuotedString(
-                        self.source[self.start + 1..self.current].to_string(),
+                        self.source[self.start + 1..self.current + 1].to_string(),
                     ));
-                    self.increment_current();
+                    self.increment();
                 }
                 '*' => {
                     if self.peek().is_some_and(|c| c.is_whitespace()) {
@@ -155,7 +163,7 @@ impl Scanner {
                 '#' => {
                     if self.peek().is_some_and(|c| c == '!') {
                         self.add_token(TokenType::Shebang);
-                        self.increment_current();
+                        self.increment();
                     } else {
                         self.add_token(TokenType::Pound);
                     }
@@ -172,17 +180,19 @@ impl Scanner {
                 }
 
                 '.' => {
-                    if self.peek().is_some_and(|c| c == '.') {
-                        if self.peek_next().is_some_and(|c| c.is_whitespace())
-                            || self.peek_next().is_none()
+                    if self.peek_next().is_some_and(|c| c == '.') {
+                        if self.peek_nth(2).is_some_and(|c| c.is_whitespace())
+                            || self.peek_nth(2).is_none()
                         {
                             self.add_token(TokenType::DotDot);
-                            self.increment_current();
+                            self.increment();
                         } else {
                             self.parse_word();
                         }
                     } else {
-                        if self.peek().is_some_and(|c| c.is_whitespace()) || self.peek().is_none() {
+                        if self.peek_next().is_some_and(|c| c.is_whitespace())
+                            || self.peek().is_none()
+                        {
                             self.add_token(TokenType::Dot);
                         } else {
                             self.parse_word();
@@ -190,7 +200,13 @@ impl Scanner {
                     }
                 }
                 '=' => {
-                    if self.peek().is_some_and(|c| c.is_whitespace())
+                    println!(
+                        "current \'{:?}\' next \'{:?}\' prev\'{:?}\'",
+                        self.peek(),
+                        self.peek_next(),
+                        self.peek_prev()
+                    );
+                    if self.peek_next().is_some_and(|c| c.is_whitespace())
                         || self.peek_prev().is_some_and(|c| c.is_whitespace())
                     {
                         self.emit_error(" whitespace around equals");
@@ -203,9 +219,9 @@ impl Scanner {
                     }
                 }
                 '>' => {
-                    if self.peek().is_some_and(|c| c == '>') {
+                    if self.peek_next().is_some_and(|c| c == '>') {
                         self.add_token(TokenType::AppendRedirect);
-                        self.increment_current();
+                        self.increment();
                     } else {
                         self.add_token(TokenType::OutputRedirect);
                     }
@@ -230,17 +246,17 @@ impl Scanner {
                     }
                 }
             }
+            self.increment();
         }
     }
     fn emit_error(&mut self, message: &str) {
         self.had_error = true;
-        let space = " ".repeat(self.current - 1);
+        let space = " ".repeat(self.current);
         eprintln!("{}", self.source);
         eprintln!("{}\x1b[;31m^{}\x1b[;37m", space, message);
     }
     pub fn next_char(&mut self) -> Option<char> {
         let ret = self.source.chars().nth(self.current);
-        self.increment_current();
         ret
     }
     pub fn peek(&self) -> Option<char> {
@@ -253,6 +269,13 @@ impl Scanner {
             self.source.chars().nth(self.current - 1)
         }
     }
+    pub fn peek_nth(&self, n: usize) -> Option<char> {
+        if self.current + n > self.source.len() {
+            None
+        } else {
+            self.source.chars().nth(self.current + n)
+        }
+    }
     pub fn peek_next(&self) -> Option<char> {
         self.source.chars().nth(self.current + 1)
     }
@@ -260,7 +283,7 @@ impl Scanner {
         while self.peek().is_some_and(|c| {
             !c.is_whitespace() && !is_pair_delimiter(c) && !is_special_character(c)
         }) {
-            self.increment_current()
+            self.increment()
         }
         if self.source[self.start..self.current].contains('*') {
             self.add_token(TokenType::GlobbedWord(
@@ -273,11 +296,12 @@ impl Scanner {
         }
     }
     fn parse_variable(&mut self) {
-        while self.peek().is_some_and(|c| allowed_name_char(c)) {
-            self.increment_current();
+        self.start = self.current;
+        while self.peek_next().is_some_and(|c| allowed_name_char(c)) {
+            self.increment();
         }
         self.add_token(TokenType::VariableExpansion(
-            self.source[self.start + 1..self.current].to_string(),
+            self.source[self.start..self.current + 1].to_string(),
         ));
     }
 
@@ -300,21 +324,21 @@ impl Scanner {
                     break;
                 }
 
-                self.increment_current();
+                self.increment();
             }
             if !paren_stack.is_empty() {
                 self.emit_error(" unmatched pair");
             } else {
-                println!("{}", self.source[self.start + 2..self.current].to_string());
-                let scanner = Scanner::new(self.source[self.start + 2..self.current].to_string());
+                println!("{}", self.source[self.start + 1..self.current].to_string());
+                let scanner = Scanner::new(self.source[self.start + 1..self.current].to_string());
                 self.add_token(TokenType::SubshellExpansion(scanner.get_tokens()));
             }
-            self.increment_current();
+            self.increment();
         }
     }
     fn parse_number(&mut self) {
         while self.peek().is_some_and(|c| c.is_numeric()) {
-            self.increment_current()
+            self.increment()
         }
 
         if self.peek().is_some_and(|c| c.is_alphabetic()) {
@@ -324,9 +348,9 @@ impl Scanner {
             .peek()
             .is_some_and(|c| c == '.' && self.peek_next().is_some_and(|c| c.is_numeric()))
         {
-            self.increment_current();
+            self.increment();
             while self.peek().is_some_and(|c| c.is_numeric()) {
-                self.increment_current()
+                self.increment()
             }
             let num = self.source[self.start..self.current]
                 .parse::<f32>()
@@ -345,7 +369,7 @@ impl Scanner {
     fn parse_and_get_integer(&mut self) -> Result<i64, ParseIntError> {
         self.start = self.current;
         while self.peek().is_some_and(|c| c.is_numeric()) {
-            self.increment_current();
+            self.increment();
         }
         if self.current < self.source.len() {
             self.source[self.start..self.current].parse()
@@ -355,14 +379,15 @@ impl Scanner {
     }
 
     fn parse_range_expression(&mut self) {
-        if self.peek().is_some_and(|c| c.is_numeric()) {
+        if self.peek_next().is_some_and(|c| c.is_numeric()) {
+            self.increment();
             // we are parsing a RangeExpressionNumeric
             let start = self.parse_and_get_integer();
-            if self.peek().is_some_and(|c| c != '.') && self.peek_next().is_some_and(|c| c != '.') {
+            if self.peek().is_some_and(|c| c == '.') && self.peek_next().is_some_and(|c| c == '.') {
+                self.increment_n(2);
+            } else {
                 self.emit_error("range expressions can take the form {i..i..i} or {a..a..i} (where \'i\' is an integer, and \'a\' is a character)");
                 return;
-            } else {
-                self.increment_n(2);
             }
             let end = self.parse_and_get_integer();
 
@@ -377,15 +402,15 @@ impl Scanner {
                     end.unwrap(),
                     None,
                 ));
-                self.increment_current();
                 return;
             }
 
-            if self.peek().is_some_and(|c| c != '.') && self.peek_next().is_some_and(|c| c != '.') {
+            if self.peek().is_some_and(|c| c == '.') && self.peek_next().is_some_and(|c| c == '.') {
+                self.increment_n(2);
+            } else {
                 self.emit_error("range expressions can take the form {i..i}, {a..a}, {i..i..i} or {a..a..i} (where \'i\' is an integer, and \'a\' is a character)");
                 return;
             }
-            self.increment_n(2);
 
             let by;
             if self.peek().is_some_and(|c| c.is_numeric()) {
@@ -393,44 +418,54 @@ impl Scanner {
                 if by.is_err() {
                     self.emit_error(" error parsing range expressions");
                     return;
-                } else {
+                }
+                if self.peek().is_some_and(|c| c == '}') {
                     self.add_token(TokenType::RangeExpressionNumeric(
                         start.unwrap(),
                         end.unwrap(),
                         Some(by.unwrap()),
                     ));
-                    self.increment_current();
+                    return;
+                } else {
+                    self.emit_error("range expressions can take the form {i..i..i} or {a..a..i} (where \'i\' is an integer, and \'a\' is a character)");
+                    self.increment();
                     return;
                 }
             } else {
-                self.increment_current();
                 self.emit_error("range expressions can take the form {i..i..i} or {a..a..i} (where \'i\' is an integer, and \'a\' is a character)");
+                self.increment();
                 return;
             }
-        } else if self.peek().is_some_and(|c| c.is_alphabetic()) {
+        } else if self.peek_next().is_some_and(|c| c.is_alphabetic()) {
             // we are parsing a RangeExpressionAlphabetic
+            self.increment();
             let start = self.peek().unwrap();
-            if self.peek().is_some_and(|c| c != '.') && self.peek_next().is_some_and(|c| c != '.') {
+            self.increment();
+
+            if self.peek().is_some_and(|c| c == '.') && self.peek_next().is_some_and(|c| c == '.') {
+                self.increment_n(2);
+            } else {
                 self.emit_error("must have \'..\', range expressions can take the form {i..i..i} or {a..a..i} (where \'i\' is an integer, and \'a\' is a character)");
                 return;
             }
-            self.increment_n(3);
+
             let end: char;
             if self.peek().is_some_and(|c| c.is_alphabetic()) {
                 end = self.peek().unwrap();
+                self.increment(); // on second alpha
             } else {
                 self.emit_error("range expressions can take the form {i..i..i} or {a..a..i} (where \'i\' is an integer, and \'a\' is a character)");
                 return;
             }
-            self.increment_current(); // on second alpha
 
             if self.peek().is_some_and(|c| c == '}') {
                 self.add_token(TokenType::RangeExpressionAlphabetic(start, end, None));
-                self.increment_current();
                 return;
-            }
-
-            if self.peek().is_some_and(|c| c != '.') && self.peek_next().is_some_and(|c| c != '.') {
+            } else if self.peek().is_some_and(|c| c == '.')
+                && self.peek_next().is_some_and(|c| c == '.')
+            {
+                self.increment_n(2);
+            } else {
                 self.emit_error("must have \'..\', range expressions can take the form {i..i..i} or {a..a..i} (where \'i\' is an integer, and \'a\' is a character)");
                 return;
             }
@@ -448,12 +483,11 @@ impl Scanner {
                         end,
                         Some(by.unwrap()),
                     ));
-                    self.increment_current();
                     return;
                 }
             } else {
-                self.increment_current();
                 self.emit_error("range expressions can take the form {i..i..i} or {a..a..i} (where \'i\' is an integer, and \'a\' is a character)");
+                self.increment();
                 return;
             }
         } else {
@@ -465,7 +499,7 @@ impl Scanner {
         self.tokens.push(Token::new(tok_type));
     }
 
-    fn increment_current(&mut self) {
+    fn increment(&mut self) {
         self.current = self.current + 1;
     }
 
@@ -480,12 +514,6 @@ pub fn is_pair_delimiter(c: char) -> bool {
         _ => false,
     }
 }
-pub fn is_group_opener(c: char) -> bool {
-    match c {
-        '(' | '{' | '[' => true,
-        _ => false,
-    }
-}
 pub fn get_pair_match(c: char) -> Option<char> {
     match c {
         '(' => Some(')'),
@@ -495,12 +523,6 @@ pub fn get_pair_match(c: char) -> Option<char> {
         '}' => Some('{'),
         ']' => Some('{'),
         _ => None,
-    }
-}
-pub fn is_group_closer(c: char) -> bool {
-    match c {
-        ')' | '}' | ']' => true,
-        _ => false,
     }
 }
 pub fn is_special_character(c: char) -> bool {
