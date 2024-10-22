@@ -2,13 +2,6 @@ use std::num::ParseIntError;
 
 #[derive(Debug, PartialEq, PartialOrd)]
 pub enum TokenType {
-    LeftParen,    // x
-    RightParen,   // x
-    LeftBrace,    // x
-    RightBrace,   // x
-    RightBracket, // x
-    LeftBracket,  // x
-
     Comma,
     Dot,
     DotDot,
