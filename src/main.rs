@@ -1,14 +1,30 @@
 mod lexer;
-use lexer::Scanner;
-use std::io::stdin;
+mod parser;
+
+#[cfg(test)]
+mod tests;
+
+use std::io::{self, Write};
+
+use parser::CommandGroup;
 
 fn main() {
+    // Input REPL loop
+    let stdin = io::stdin();
+    let mut stdout = io::stdout();
     loop {
-        let mut command = String::new();
-        if let Err(e) = std::io::Stdin::read_line(&stdin(), &mut command) {
-            eprintln!("{}", e);
+        print!("> ");
+        stdout.flush().unwrap();
+
+        let mut input = String::new();
+        stdin.read_line(&mut input).unwrap();
+        let input = input.trim();
+
+        if input == "exit" {
+            break;
         }
-        let scan = Scanner::new(command);
-        println!("Got: {:?}", scan.get_tokens());
+
+        let command_group = CommandGroup::parse(input);
+        println!("{command_group:#?}");
     }
 }
