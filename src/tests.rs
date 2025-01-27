@@ -132,10 +132,7 @@ mod tests {
 
     #[test]
     fn test_both_redirection() {
-        let tests = vec![
-            "cmd &> both.log",
-            "cmd &>> both.log",
-        ];
+        let tests = vec!["cmd &> both.log", "cmd &>> both.log"];
 
         for input in tests {
             let group = CommandGroup::parse(input);
@@ -249,5 +246,130 @@ mod tests {
             let group = CommandGroup::parse(input);
             assert_single_command(&group, &["cmd", "arg1", "arg2"]);
         }
+    }
+
+    #[test]
+    fn test_sequential_commands() {
+        let group = CommandGroup::parse("echo hello ; echo world");
+        assert_eq!(group.commands[0].argv, vec!["echo", "hello"]);
+
+        let and_then = group.commands[0]
+            .and_then
+            .as_ref()
+            .expect("Expected AndThen");
+        assert!(!and_then.conditional, "Expected non-conditional AndThen");
+        assert_eq!(and_then.target.commands[0].argv, vec!["echo", "world"]);
+    }
+
+    #[test]
+    fn test_conditional_commands() {
+        let group = CommandGroup::parse("test -f file.txt && echo 'file exists'");
+        assert_eq!(group.commands[0].argv, vec!["test", "-f", "file.txt"]);
+
+        let and_then = group.commands[0]
+            .and_then
+            .as_ref()
+            .expect("Expected AndThen");
+        assert!(and_then.conditional, "Expected conditional AndThen");
+        assert_eq!(
+            and_then.target.commands[0].argv,
+            vec!["echo", "file exists"]
+        );
+    }
+
+    #[test]
+    fn test_multiple_sequential_commands() {
+        let group = CommandGroup::parse("cmd1 ; cmd2 ; cmd3");
+        assert_eq!(group.commands[0].argv, vec!["cmd1"]);
+
+        let and_then1 = group.commands[0]
+            .and_then
+            .as_ref()
+            .expect("Expected first AndThen");
+        assert!(!and_then1.conditional);
+        assert_eq!(and_then1.target.commands[0].argv, vec!["cmd2"]);
+
+        let and_then2 = and_then1.target.commands[0]
+            .and_then
+            .as_ref()
+            .expect("Expected second AndThen");
+        assert!(!and_then2.conditional);
+        assert_eq!(and_then2.target.commands[0].argv, vec!["cmd3"]);
+    }
+
+    #[test]
+    fn test_multiple_conditional_commands() {
+        let group = CommandGroup::parse("test -d dir && cd dir && echo 'changed dir'");
+        assert_eq!(group.commands[0].argv, vec!["test", "-d", "dir"]);
+
+        let and_then1 = group.commands[0]
+            .and_then
+            .as_ref()
+            .expect("Expected first AndThen");
+        assert!(and_then1.conditional);
+        assert_eq!(and_then1.target.commands[0].argv, vec!["cd", "dir"]);
+
+        let and_then2 = and_then1.target.commands[0]
+            .and_then
+            .as_ref()
+            .expect("Expected second AndThen");
+        assert!(and_then2.conditional);
+        assert_eq!(
+            and_then2.target.commands[0].argv,
+            vec!["echo", "changed dir"]
+        );
+    }
+
+    #[test]
+    fn test_mixed_conditional_and_sequential() {
+        let group = CommandGroup::parse("mkdir dir && cd dir ; echo 'done'");
+        assert_eq!(group.commands[0].argv, vec!["mkdir", "dir"]);
+
+        let and_then1 = group.commands[0]
+            .and_then
+            .as_ref()
+            .expect("Expected first AndThen");
+        assert!(and_then1.conditional);
+        assert_eq!(and_then1.target.commands[0].argv, vec!["cd", "dir"]);
+
+        let and_then2 = and_then1.target.commands[0]
+            .and_then
+            .as_ref()
+            .expect("Expected second AndThen");
+        assert!(!and_then2.conditional);
+        assert_eq!(and_then2.target.commands[0].argv, vec!["echo", "done"]);
+    }
+
+    #[test]
+    fn test_and_then_with_redirections() {
+        let group = CommandGroup::parse("echo 'log entry' > log.txt && cat log.txt");
+        assert_eq!(group.commands[0].argv, vec!["echo", "log entry"]);
+        assert_eq!(
+            group.commands[0].redirect_to[0].target.to_str().unwrap(),
+            "log.txt"
+        );
+
+        let and_then = group.commands[0]
+            .and_then
+            .as_ref()
+            .expect("Expected AndThen");
+        assert!(and_then.conditional);
+        assert_eq!(and_then.target.commands[0].argv, vec!["cat", "log.txt"]);
+    }
+
+    #[test]
+    fn test_and_then_with_pipes() {
+        let group = CommandGroup::parse("cat file.txt | grep error && echo 'found error'");
+        assert_eq!(group.commands[0].argv, vec!["cat", "file.txt"]);
+
+        let pipe_to = group.commands[0].pipe_to.as_ref().expect("Expected pipe");
+        assert_eq!(pipe_to.target.argv, vec!["grep", "error"]);
+
+        let and_then = pipe_to.target.and_then.as_ref().expect("Expected AndThen");
+        assert!(and_then.conditional);
+        assert_eq!(
+            and_then.target.commands[0].argv,
+            vec!["echo", "found error"]
+        );
     }
 }
