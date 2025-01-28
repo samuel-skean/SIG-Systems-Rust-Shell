@@ -33,7 +33,7 @@ pub struct PipeTo {
 #[derive(Debug)]
 #[expect(dead_code)]
 pub struct AndThen {
-    pub target: Box<CommandGroup>,
+    pub target: CommandGroup,
     pub conditional: bool,
 }
 
@@ -111,7 +111,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
                     self.tokens.next();
                     let next_group = self.parse_command_group();
                     and_then = Some(AndThen {
-                        target: Box::new(next_group),
+                        target: next_group,
                         conditional: false,
                     });
                     break;
@@ -120,7 +120,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
                     self.tokens.next();
                     let next_group = self.parse_command_group();
                     and_then = Some(AndThen {
-                        target: Box::new(next_group),
+                        target: next_group,
                         conditional: true,
                     });
                     break;
