@@ -9,6 +9,8 @@ pub enum Token {
     RedirOut,
     RedirErr,
     RedirBoth,
+    AndThen,
+    AndThenIf,
 }
 
 pub struct Lexer<'a> {
@@ -56,7 +58,13 @@ impl<'a> Lexer<'a> {
                 in_double_quotes = true;
             } else if c == '>' || c == '&' {
                 break;
-            } else if c.is_ascii_digit() && self.chars.clone().next_if(|&next_c| next_c == '>').is_some() {
+            } else if c.is_ascii_digit()
+                && self
+                    .chars
+                    .clone()
+                    .next_if(|&next_c| next_c == '>')
+                    .is_some()
+            {
                 // Only break on digits if they're followed by '>', like "2>"
                 break;
             } else {
@@ -69,6 +77,35 @@ impl<'a> Lexer<'a> {
             Some(Token::Word(word))
         } else {
             None
+        }
+    }
+
+    fn lex_and_then(&mut self) -> Option<Token> {
+        let mut iter = self.chars.clone();
+
+        if let Some(&c) = iter.peek() {
+            if c == '&' {
+                iter.next();
+
+                if let Some(&next_c) = iter.peek() {
+                    if next_c == '&' {
+                        self.chars.next();
+                        self.chars.next();
+                        return Some(Token::AndThenIf);
+                    } else {
+                        return None;
+                    }
+                } else {
+                    return None;
+                }
+            } else if c == ';' {
+                self.chars.next();
+                return Some(Token::AndThen);
+            } else {
+                return None;
+            }
+        } else {
+            return None;
         }
     }
 
@@ -155,6 +192,10 @@ impl Iterator for Lexer<'_> {
         }
 
         if let Some(token) = self.lex_pipe() {
+            return Some(token);
+        }
+
+        if let Some(token) = self.lex_and_then() {
             return Some(token);
         }
 

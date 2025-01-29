@@ -20,6 +20,7 @@ pub struct Command {
     pub argv: Vec<String>,
     pub pipe_to: Option<PipeTo>,
     pub redirect_to: Vec<FileRedir>,
+    pub and_then: Option<AndThen>,
 }
 
 #[derive(Debug)]
@@ -27,6 +28,13 @@ pub struct Command {
 pub struct PipeTo {
     pub pipe_type: RedirType,
     pub target: Box<Command>,
+}
+
+#[derive(Debug)]
+#[expect(dead_code)]
+pub struct AndThen {
+    pub target: CommandGroup,
+    pub conditional: bool,
 }
 
 #[derive(Debug)]
@@ -63,6 +71,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
         let mut argv = Vec::new();
         let mut pipe_to = None;
         let mut redirect_to = Vec::new();
+        let mut and_then = None;
 
         while let Some(token) = self.tokens.peek().cloned() {
             match token {
@@ -98,6 +107,24 @@ impl<I: Iterator<Item = Token>> Parser<I> {
                     }
                     break;
                 }
+                Token::AndThen => {
+                    self.tokens.next();
+                    let next_group = self.parse_command_group();
+                    and_then = Some(AndThen {
+                        target: next_group,
+                        conditional: false,
+                    });
+                    break;
+                }
+                Token::AndThenIf => {
+                    self.tokens.next();
+                    let next_group = self.parse_command_group();
+                    and_then = Some(AndThen {
+                        target: next_group,
+                        conditional: true,
+                    });
+                    break;
+                }
             }
         }
 
@@ -105,6 +132,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
             Some(Command {
                 argv,
                 pipe_to,
+                and_then,
                 redirect_to,
             })
         } else {
