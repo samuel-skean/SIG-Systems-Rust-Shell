@@ -19,8 +19,8 @@ pub struct CommandGroup {
 pub struct Command {
     pub argv: Vec<String>,
     pub pipe_to: Option<PipeTo>,
-    pub and_then: Option<AndThen>,
     pub redirect_to: Vec<FileRedir>,
+    pub and_then: Option<AndThen>,
 }
 
 #[derive(Debug)]
