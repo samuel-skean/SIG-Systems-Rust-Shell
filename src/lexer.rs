@@ -1,6 +1,8 @@
 use std::iter::Peekable;
 use std::str::Chars;
 
+use crate::parser::ParseError;
+
 #[derive(Debug)]
 struct UnmatchedDelimiterError;
 
@@ -33,7 +35,7 @@ impl<'a> Lexer<'a> {
         while self.chars.next_if(|c| c.is_whitespace()).is_some() {}
     }
 
-    fn lex_word(&mut self) -> Option<Token> {
+    fn lex_word(&mut self) -> Result<Token, ParseError> {
         let mut word = String::new();
         let mut in_single_quotes = false;
         let mut in_double_quotes = false;
@@ -78,10 +80,14 @@ impl<'a> Lexer<'a> {
             }
         }
 
+        if in_single_quotes || in_double_quotes {
+            return Err(ParseError::UnterminatedStringLiteral);
+        }
+
         if !word.is_empty() {
-            Some(Token::Word(word))
+            Ok(Token::Word(word))
         } else {
-            None
+            Err(ParseError::NotFound)
         }
     }
 
@@ -186,7 +192,7 @@ impl<'a> Lexer<'a> {
     }
 
     // add a custom error type maybe
-    fn subshell_inner(&mut self) -> Result<String, UnmatchedDelimiterError> {
+    fn subshell_inner(&mut self) -> Result<String, ParseError> {
         let mut inner_string = String::new();
         let mut open_parens = 1;
         let mut matched = false;
@@ -218,11 +224,11 @@ impl<'a> Lexer<'a> {
         if matched {
             Ok(inner_string)
         } else {
-            Err(UnmatchedDelimiterError)
+            Err(ParseError::UnmatchedDelimiterError)
         }
     }
 
-    fn lex_subshell(&mut self) -> Result<Option<Token>, UnmatchedDelimiterError> {
+    fn lex_subshell(&mut self) -> Result<Token, ParseError> {
         let mut iter = self.chars.clone();
 
         if let Some(c) = iter.next() {
@@ -231,15 +237,15 @@ impl<'a> Lexer<'a> {
                     if next_c == '(' {
                         self.chars.next();
                         let inner_string = self.subshell_inner()?;
-                        return Ok(Some(Token::SubShell(inner_string)));
+                        return Ok(Token::SubShell(inner_string));
                     }
                 }
             } else if c == '(' {
                 let inner_string = self.subshell_inner()?;
-                return Ok(Some(Token::SubShell(inner_string)));
+                return Ok(Token::SubShell(inner_string));
             }
         }
-        Ok(None)
+        Err(ParseError::NotFound)
     }
 
     /*
@@ -248,7 +254,7 @@ impl<'a> Lexer<'a> {
      *         referred to as an identifier
      */
 
-    fn lex_variable(&mut self) -> Option<Token> {
+    fn lex_variable(&mut self) -> Result<Token, ParseError> {
         if let Some(&c) = self.chars.peek() {
             if c == '$' {
                 self.chars.next();
@@ -258,7 +264,7 @@ impl<'a> Lexer<'a> {
                     .peek()
                     .is_some_and(|&ch| ch.is_alphabetic() || ch == '_')
                 {
-                    return None;
+                    return Err(ParseError::InvalidVariable);
                 }
 
                 let variable_name: String = self
@@ -270,41 +276,47 @@ impl<'a> Lexer<'a> {
                 for _ in 0..variable_name.len() {
                     self.chars.next();
                 }
-                return Some(Token::Variable(variable_name));
+                return Ok(Token::Variable(variable_name));
             }
         }
-        None
+        Err(ParseError::NotFound)
     }
 }
 
 impl Iterator for Lexer<'_> {
-    type Item = Token;
+    type Item = Result<Token, ParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.skip_whitespace();
 
         if let Some(token) = self.lex_redirection() {
-            return Some(token);
+            return Some(Ok(token));
         }
 
         if let Some(token) = self.lex_pipe() {
-            return Some(token);
+            return Some(Ok(token));
         }
 
         if let Some(token) = self.lex_and_then() {
-            return Some(token);
+            return Some(Ok(token));
         }
 
         match self.lex_subshell() {
-            Ok(Some(token)) => return Some(token),
-            Ok(None) => (),
-            Err(e) => eprintln!("{:?}", e),
+            Ok(token) => return Some(Ok(token)),
+            Err(ParseError::NotFound) => (),
+            Err(e) => return Some(Err(e)),
         }
 
-        if let Some(token) = self.lex_variable() {
-            return Some(token);
+        match self.lex_variable() {
+            Ok(token) => return Some(Ok(token)),
+            Err(ParseError::NotFound) => (),
+            Err(e) => return Some(Err(e)),
         }
 
-        self.lex_word()
+        match self.lex_word() {
+            Ok(token) => return Some(Ok(token)),
+            Err(ParseError::NotFound) => None,
+            Err(e) => return Some(Err(e)),
+        }
     }
 }

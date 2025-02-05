@@ -4,6 +4,7 @@ mod parser;
 #[cfg(test)]
 mod tests;
 
+use libc::{execle, execve, fork};
 use std::io::{self, Write};
 
 use parser::Command;

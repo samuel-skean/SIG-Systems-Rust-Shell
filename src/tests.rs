@@ -9,7 +9,10 @@ mod tests {
     use crate::parser::*;
 
     fn parse_command(input: &str) -> Option<Command> {
-        Command::parse(input)
+        match Command::parse(input) {
+            Ok(s) => Some(s),
+            Err(_) => None,
+        }
     }
 
     #[test]
