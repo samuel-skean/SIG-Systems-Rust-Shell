@@ -21,7 +21,7 @@ pub struct Command {
     pub argv: Vec<Arg>,
     pub pipe_to: Option<PipeTo>,
     pub redirect_to: Vec<FileRedir>,
-    pub and_then: Option<Box<AndThen>>,
+    pub and_then: Option<AndThen>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -35,7 +35,7 @@ pub struct PipeTo {
 #[expect(dead_code)]
 pub struct AndThen {
     pub conditional: bool,
-    pub target: Command,
+    pub target: Box<Command>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -102,7 +102,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
                     self.tokens.next();
                     if let Some(next_command) = self.parse_command() {
                         and_then = Some(AndThen {
-                            target: next_command,
+                            target: Box::new(next_command),
                             conditional: false,
                         });
                     }
@@ -112,7 +112,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
                     self.tokens.next();
                     if let Some(next_command) = self.parse_command() {
                         and_then = Some(AndThen {
-                            target: next_command,
+                            target: Box::new(next_command),
                             conditional: true,
                         });
                     }
@@ -139,7 +139,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
             Some(Command {
                 argv,
                 pipe_to,
-                and_then: and_then.map(|command| Box::new(command)),
+                and_then,
                 redirect_to,
             })
         } else {

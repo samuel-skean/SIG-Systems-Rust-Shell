@@ -200,8 +200,8 @@ mod tests {
 
         assert_eq!(
             command.and_then,
-            Some(Box::new(AndThen {
-                target: Command {
+            Some(AndThen {
+                target: Box::new(Command {
                     argv: vec![
                         Arg::Word("echo".to_string()),
                         Arg::Word("world".to_string())
@@ -209,9 +209,9 @@ mod tests {
                     pipe_to: None,
                     redirect_to: Vec::new(),
                     and_then: None,
-                },
+                }),
                 conditional: true
-            }))
+            })
         );
     }
 
@@ -230,8 +230,8 @@ mod tests {
 
         assert_eq!(
             command.and_then,
-            Some(Box::new(AndThen {
-                target: Command {
+            Some(AndThen {
+                target: Box::new(Command {
                     argv: vec![
                         Arg::Word("echo".to_string()),
                         Arg::Word("world".to_string())
@@ -239,9 +239,9 @@ mod tests {
                     pipe_to: None,
                     redirect_to: Vec::new(),
                     and_then: None,
-                },
+                }),
                 conditional: false
-            }))
+            })
         );
     }
 
@@ -422,8 +422,8 @@ mod tests {
 
         assert_eq!(
             command.and_then,
-            Some(Box::new(AndThen {
-                target: Command {
+            Some(AndThen {
+                target: Box::new(Command {
                     argv: vec![
                         Arg::Word("echo".to_string()),
                         Arg::Word("world".to_string())
@@ -431,9 +431,9 @@ mod tests {
                     pipe_to: None,
                     redirect_to: Vec::new(),
                     and_then: None,
-                },
+                }),
                 conditional: true
-            }))
+            })
         );
     }
 
@@ -515,8 +515,8 @@ mod tests {
 
         assert_eq!(
             command.and_then,
-            Some(Box::new(AndThen {
-                target: Command {
+            Some(AndThen {
+                target: Box::new(Command {
                     argv: vec![
                         Arg::Word("echo".to_string()),
                         Arg::Word("world".to_string())
@@ -535,9 +535,9 @@ mod tests {
                     }),
                     redirect_to: Vec::new(),
                     and_then: None,
-                },
+                }),
                 conditional: true
-            }))
+            })
         );
     }
 
