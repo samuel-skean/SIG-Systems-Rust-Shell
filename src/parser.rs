@@ -3,48 +3,49 @@ use std::path::PathBuf;
 
 use crate::lexer::{Lexer, Token};
 
+#[derive(Debug, PartialEq)]
+pub enum Arg {
+    Word(String),
+    Variable(String),
+    Subshell(Command),
+}
+
 #[derive(Debug)]
 pub struct Parser<I: Iterator<Item = Token>> {
     tokens: Peekable<I>,
 }
 
-#[derive(Debug)]
-#[expect(dead_code)]
-pub struct CommandGroup {
-    pub commands: Vec<Command>,
-}
-
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 #[expect(dead_code)]
 pub struct Command {
-    pub argv: Vec<String>,
+    pub argv: Vec<Arg>,
     pub pipe_to: Option<PipeTo>,
     pub redirect_to: Vec<FileRedir>,
-    pub and_then: Option<AndThen>,
+    pub and_then: Option<Box<AndThen>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 #[expect(dead_code)]
 pub struct PipeTo {
     pub pipe_type: RedirType,
     pub target: Box<Command>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 #[expect(dead_code)]
 pub struct AndThen {
-    pub target: CommandGroup,
     pub conditional: bool,
+    pub target: Command,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum RedirType {
     Stdout,
     Stderr,
     Both,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 #[expect(dead_code)]
 pub struct FileRedir {
     pub redirect_type: RedirType,
@@ -57,27 +58,17 @@ impl<I: Iterator<Item = Token>> Parser<I> {
             tokens: tokens.peekable(),
         }
     }
-
-    pub fn parse_command_group(&mut self) -> CommandGroup {
-        self.parse_command()
-            // TODO: Fix this nasty hack and actually support `&&` and `;` parsing
-            .map(|cmd| CommandGroup {
-                commands: vec![cmd],
-            })
-            .unwrap_or(CommandGroup { commands: vec![] })
-    }
-
     fn parse_command(&mut self) -> Option<Command> {
         let mut argv = Vec::new();
         let mut pipe_to = None;
         let mut redirect_to = Vec::new();
         let mut and_then = None;
 
-        while let Some(token) = self.tokens.peek().cloned() {
+        while let Some(token) = self.tokens.peek() {
             match token {
                 Token::Word(_) => {
                     if let Some(Token::Word(word)) = self.tokens.next() {
-                        argv.push(word);
+                        argv.push(Arg::Word(word));
                     }
                 }
                 Token::RedirOut | Token::RedirErr | Token::RedirBoth => {
@@ -109,21 +100,37 @@ impl<I: Iterator<Item = Token>> Parser<I> {
                 }
                 Token::AndThen => {
                     self.tokens.next();
-                    let next_group = self.parse_command_group();
-                    and_then = Some(AndThen {
-                        target: next_group,
-                        conditional: false,
-                    });
+                    if let Some(next_command) = self.parse_command() {
+                        and_then = Some(AndThen {
+                            target: next_command,
+                            conditional: false,
+                        });
+                    }
                     break;
                 }
                 Token::AndThenIf => {
                     self.tokens.next();
-                    let next_group = self.parse_command_group();
-                    and_then = Some(AndThen {
-                        target: next_group,
-                        conditional: true,
-                    });
+                    if let Some(next_command) = self.parse_command() {
+                        and_then = Some(AndThen {
+                            target: next_command,
+                            conditional: true,
+                        });
+                    }
                     break;
+                }
+                Token::SubShell(command) => {
+                    if let Some(command) = Command::parse(command) {
+                        argv.push(Arg::Subshell(command));
+                    }
+                    self.tokens.next();
+                }
+                Token::Variable(_) => {
+                    argv.push(Arg::Variable({
+                        match self.tokens.next().unwrap() {
+                            Token::Variable(v) => v,
+                            _ => panic!("what"),
+                        }
+                    }));
                 }
             }
         }
@@ -132,7 +139,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
             Some(Command {
                 argv,
                 pipe_to,
-                and_then,
+                and_then: and_then.map(|command| Box::new(command)),
                 redirect_to,
             })
         } else {
@@ -150,10 +157,10 @@ impl<I: Iterator<Item = Token>> Parser<I> {
     }
 }
 
-impl CommandGroup {
-    pub fn parse(input: impl AsRef<str>) -> Self {
+impl Command {
+    pub fn parse(input: impl AsRef<str>) -> Option<Self> {
         let lexer = Lexer::new(input.as_ref());
         let mut parser = Parser::new(lexer);
-        parser.parse_command_group()
+        parser.parse_command()
     }
 }
