@@ -10,6 +10,7 @@ pub enum ParseError {
     UnmatchedDelimiterError,
     InvalidVariable,
     UnterminatedStringLiteral,
+    NonRedirTypeToken,
     NotFound,
 }
 
@@ -63,6 +64,23 @@ pub enum RedirType {
     Both,
 }
 
+#[derive(Debug)]
+pub struct NonRedirTypeToken {}
+impl TryFrom<Token> for RedirType {
+    type Error = ParseError;
+    fn try_from(val: Token) -> Result<Self, Self::Error> {
+        use Token as T;
+        use RedirType as R;
+
+        match val {
+            T::RedirOut | T::Pipe => Ok(R::Stdout),
+            T::RedirBoth | T::PipeBoth => Ok(R::Both),
+            T::RedirErr => Ok(R::Stderr),
+            _ => Err(ParseError::NonRedirTypeToken)
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub struct FileRedir {
     pub redirect_type: RedirType,
@@ -75,6 +93,7 @@ impl<I: Iterator<Item = Result<Token, ParseError>>> Parser<I> {
             tokens: tokens.peekable(),
         }
     }
+
     fn parse_command(&mut self) -> Result<Command, ParseErrors> {
         let mut errors = Vec::new();
         let mut argv = Vec::new();
@@ -82,16 +101,12 @@ impl<I: Iterator<Item = Result<Token, ParseError>>> Parser<I> {
         let mut redirect_to = Vec::new();
         let mut and_then = None;
 
-        while let Some(token) = self.tokens.peek() {
-            match token {
+        while let Some(token_res) = self.tokens.next() {
+            match token_res {
                 Ok(tok) => match tok {
-                    Token::Word(_) => match self.tokens.next() {
-                        Some(Ok(Token::Word(word))) => argv.push(Arg::Word(word)),
-                        Some(Err(e)) => errors.push(e),
-                        _ => unsafe { unreachable_unchecked() },
-                    },
-                    Token::RedirOut | Token::RedirErr | Token::RedirBoth => {
-                        let redir_type = self.parse_redir_type();
+                    Token::Word(word) => argv.push(Arg::Word(word)),
+                    tok if matches!(tok, Token::RedirOut | Token::RedirErr | Token::RedirBoth) => {
+                        let redir_type = tok.try_into().unwrap();
                         if let Some(Ok(Token::Word(path))) = self.tokens.next() {
                             redirect_to.push(FileRedir {
                                 redirect_type: redir_type,
@@ -101,13 +116,9 @@ impl<I: Iterator<Item = Result<Token, ParseError>>> Parser<I> {
                             errors.push(ParseError::MissingFileName);
                         }
                     }
-                    Token::Pipe | Token::PipeBoth => {
-                        let pipe_token = self.tokens.next();
-                        let pipe_type = match pipe_token {
-                            Some(Ok(Token::Pipe)) => RedirType::Stdout,
-                            Some(Ok(Token::PipeBoth)) => RedirType::Both,
-                            _ => RedirType::Stdout,
-                        };
+                    pipe_token if matches!(pipe_token, Token::Pipe | Token::PipeBoth) => {
+                        let pipe_type: RedirType = pipe_token.try_into().unwrap();
+
                         match self.parse_command() {
                             Ok(next_command) => {
                                 pipe_to = Some(PipeTo {
@@ -122,7 +133,6 @@ impl<I: Iterator<Item = Result<Token, ParseError>>> Parser<I> {
                         break;
                     }
                     Token::AndThen => {
-                        self.tokens.next();
                         match self.parse_command() {
                             Ok(next_command) => {
                                 and_then = Some(AndThen {
@@ -137,7 +147,6 @@ impl<I: Iterator<Item = Result<Token, ParseError>>> Parser<I> {
                         break;
                     }
                     Token::AndThenIf => {
-                        self.tokens.next();
                         match self.parse_command() {
                             Ok(next_command) => {
                                 and_then = Some(AndThen {
@@ -156,22 +165,17 @@ impl<I: Iterator<Item = Result<Token, ParseError>>> Parser<I> {
                             Ok(command) => argv.push(Arg::Subshell(command)),
                             Err(errs) => errors.extend(errs.into_iter()),
                         }
-                        self.tokens.next();
                     }
                     Token::Variable(s) => {
-                        argv.push(Arg::Variable({
-                            match self.tokens.next().unwrap() {
-                                Ok(Token::Variable(v)) => v,
-                                _ => unsafe { unreachable_unchecked() },
-                            }
-                        }));
+                        argv.push(Arg::Variable(s));
+                    }
+                    _ => {
+                        // TODO: Re-evaluate this!
+                        unsafe { unreachable_unchecked() }
                     }
                 },
-                Err(_) => {
-                    errors.push(match self.tokens.next() {
-                        Some(Err(e)) => e,
-                        _ => panic!("what"),
-                    });
+                Err(e) => {
+                    errors.push(e);
                 }
             }
         }

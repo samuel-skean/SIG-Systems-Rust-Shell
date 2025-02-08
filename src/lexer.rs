@@ -102,12 +102,12 @@ impl<'a> Lexer<'a> {
                     if next_c == '&' {
                         self.chars.next();
                         self.chars.next();
-                        return Some(Token::AndThenIf);
+                        Some(Token::AndThenIf)
                     } else {
-                        return None;
+                        None
                     }
                 } else {
-                    return None;
+                    None
                 }
             } else if c == ';' {
                 self.chars.next();
@@ -116,7 +116,7 @@ impl<'a> Lexer<'a> {
                 return None;
             }
         } else {
-            return None;
+            None
         }
     }
 
@@ -314,9 +314,9 @@ impl Iterator for Lexer<'_> {
         }
 
         match self.lex_word() {
-            Ok(token) => return Some(Ok(token)),
+            Ok(token) => Some(Ok(token)),
             Err(ParseError::NotFound) => None,
-            Err(e) => return Some(Err(e)),
+            Err(e) => Some(Err(e)),
         }
     }
 }

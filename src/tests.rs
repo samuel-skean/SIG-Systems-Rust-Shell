@@ -4,15 +4,12 @@
 mod tests {
     use std::path::PathBuf;
 
-    use super::*;
-    use crate::lexer::*;
+    
+    
     use crate::parser::*;
 
     fn parse_command(input: &str) -> Option<Command> {
-        match Command::parse(input) {
-            Ok(s) => Some(s),
-            Err(_) => None,
-        }
+        Command::parse(input).ok()
     }
 
     #[test]
