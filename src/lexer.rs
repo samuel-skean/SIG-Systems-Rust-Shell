@@ -20,12 +20,12 @@ pub enum Token {
     AndThenIf,
 }
 
-pub struct Lexer<'a> {
-    chars: Peekable<Chars<'a>>,
+pub struct Lexer<'input> {
+    chars: Peekable<Chars<'input>>,
 }
 
-impl<'a> Lexer<'a> {
-    pub fn new(input: &'a str) -> Self {
+impl<'input> Lexer<'input> {
+    pub fn new(input: &'input str) -> Self {
         Lexer {
             chars: input.chars().peekable(),
         }
