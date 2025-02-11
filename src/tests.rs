@@ -6,16 +6,21 @@ mod tests {
 
     
     
+    use bumpalo::{boxed::Box as BumpaloBox, Bump};
+
     use crate::parser::*;
 
-    fn parse_command(input: &str) -> Option<Command> {
-        Command::parse(input).ok()
+    
+    fn parse_command<'bump, 'input>(input: &'input str, bump: &'bump Bump) -> Option<Command<'bump>> {
+        Command::parse(input, &bump).ok()
     }
 
     #[test]
     fn test_word_parsing() {
+        let bump = Bump::new();
+
         let input = "echo hello";
-        let command = parse_command(input).expect("Failed to parse command");
+        let command = parse_command(input, &bump).expect("Failed to parse command");
 
         assert_eq!(
             command.argv,
@@ -28,8 +33,10 @@ mod tests {
 
     #[test]
     fn test_subshell_parsing() {
+        let bump = Bump::new();
+
         let input = "echo $(ls -l)";
-        let command = parse_command(input).expect("Failed to parse command");
+        let command = parse_command(input, &bump).expect("Failed to parse command");
 
         assert_eq!(
             command.argv,
@@ -47,8 +54,10 @@ mod tests {
 
     #[test]
     fn test_variable_parsing() {
+        let bump = Bump::new();
+
         let input = "echo $HOME";
-        let command = parse_command(input).expect("Failed to parse command");
+        let command = parse_command(input, &bump).expect("Failed to parse command");
 
         assert_eq!(
             command.argv,
@@ -61,8 +70,10 @@ mod tests {
 
     #[test]
     fn test_redirection_stdout() {
+        let bump = Bump::new();
+
         let input = "echo hello > output.txt";
-        let command = parse_command(input).expect("Failed to parse command");
+        let command = parse_command(input, &bump).expect("Failed to parse command");
 
         assert_eq!(
             command.argv,
@@ -83,8 +94,10 @@ mod tests {
 
     #[test]
     fn test_redirection_stderr() {
+        let bump = Bump::new();
+
         let input = "echo hello 2> error.txt";
-        let command = parse_command(input).expect("Failed to parse command");
+        let command = parse_command(input, &bump).expect("Failed to parse command");
 
         assert_eq!(
             command.argv,
@@ -105,8 +118,10 @@ mod tests {
 
     #[test]
     fn test_redirection_both() {
+        let bump = Bump::new();
+
         let input = "echo hello &> output.txt";
-        let command = parse_command(input).expect("Failed to parse command");
+        let command = parse_command(input, &bump).expect("Failed to parse command");
 
         assert_eq!(
             command.argv,
@@ -127,8 +142,10 @@ mod tests {
 
     #[test]
     fn test_pipe() {
+        let bump = Bump::new();
+
         let input = "echo hello | grep world";
-        let command = parse_command(input).expect("Failed to parse command");
+        let command = parse_command(input, &bump).expect("Failed to parse command");
 
         assert_eq!(
             command.argv,
@@ -142,7 +159,7 @@ mod tests {
             command.pipe_to,
             Some(PipeTo {
                 pipe_type: RedirType::Stdout,
-                target: Box::new(Command {
+                target: BumpaloBox::new_in(Command {
                     argv: vec![
                         Arg::Word("grep".to_string()),
                         Arg::Word("world".to_string())
@@ -150,15 +167,17 @@ mod tests {
                     pipe_to: None,
                     redirect_to: Vec::new(),
                     and_then: None,
-                })
+                }, &bump)
             })
         );
     }
 
     #[test]
     fn test_pipe_both() {
+        let bump = Bump::new();
+
         let input = "echo hello |& grep world";
-        let command = parse_command(input).expect("Failed to parse command");
+        let command = parse_command(input, &bump).expect("Failed to parse command");
 
         assert_eq!(
             command.argv,
@@ -172,7 +191,7 @@ mod tests {
             command.pipe_to,
             Some(PipeTo {
                 pipe_type: RedirType::Both,
-                target: Box::new(Command {
+                target: BumpaloBox::new_in(Command {
                     argv: vec![
                         Arg::Word("grep".to_string()),
                         Arg::Word("world".to_string())
@@ -180,15 +199,17 @@ mod tests {
                     pipe_to: None,
                     redirect_to: Vec::new(),
                     and_then: None,
-                })
+                }, &bump)
             })
         );
     }
 
     #[test]
     fn test_and_then_if() {
+        let bump = Bump::new();
+
         let input = "echo hello && echo world";
-        let command = parse_command(input).expect("Failed to parse command");
+        let command = parse_command(input, &bump).expect("Failed to parse command");
 
         assert_eq!(
             command.argv,
@@ -201,7 +222,7 @@ mod tests {
         assert_eq!(
             command.and_then,
             Some(AndThen {
-                target: Box::new(Command {
+                target: BumpaloBox::new_in(Command {
                     argv: vec![
                         Arg::Word("echo".to_string()),
                         Arg::Word("world".to_string())
@@ -209,7 +230,7 @@ mod tests {
                     pipe_to: None,
                     redirect_to: Vec::new(),
                     and_then: None,
-                }),
+                }, &bump),
                 conditional: true
             })
         );
@@ -217,8 +238,10 @@ mod tests {
 
     #[test]
     fn test_and_then() {
+        let bump = Bump::new();
+
         let input = "echo hello ; echo world";
-        let command = parse_command(input).expect("Failed to parse command");
+        let command = parse_command(input, &bump).expect("Failed to parse command");
 
         assert_eq!(
             command.argv,
@@ -231,7 +254,7 @@ mod tests {
         assert_eq!(
             command.and_then,
             Some(AndThen {
-                target: Box::new(Command {
+                target: BumpaloBox::new_in(Command {
                     argv: vec![
                         Arg::Word("echo".to_string()),
                         Arg::Word("world".to_string())
@@ -239,7 +262,7 @@ mod tests {
                     pipe_to: None,
                     redirect_to: Vec::new(),
                     and_then: None,
-                }),
+                }, &bump),
                 conditional: false
             })
         );
@@ -247,22 +270,28 @@ mod tests {
 
     #[test]
     fn test_empty_input() {
+        let bump = Bump::new();
+
         let input = "";
-        let command = parse_command(input);
+        let command = parse_command(input, &bump);
         assert_eq!(command, None);
     }
 
     #[test]
     fn test_unclosed_subshell() {
+        let bump = Bump::new();
+
         let input = "echo $(ls -l";
-        let command = parse_command(input);
+        let command = parse_command(input, &bump);
         assert_eq!(command, None);
     }
 
     #[test]
     fn test_multiple_redirections() {
+        let bump = Bump::new();
+
         let input = "echo hello > out.txt 2> err.txt";
-        let command = parse_command(input).expect("Failed to parse command");
+        let command = parse_command(input, &bump).expect("Failed to parse command");
 
         assert_eq!(
             command.argv,
@@ -289,8 +318,10 @@ mod tests {
 
     #[test]
     fn test_edge_case_variable_with_special_chars() {
+        let bump = Bump::new();
+
         let input = "echo $HOME_VAR";
-        let command = parse_command(input).expect("Failed to parse command");
+        let command = parse_command(input, &bump).expect("Failed to parse command");
 
         assert_eq!(
             command.argv,
@@ -303,15 +334,19 @@ mod tests {
 
     #[test]
     fn test_invalid_variable() {
+        let bump = Bump::new();
+
         let input = "echo $1invalidVar";
-        let command = parse_command(input);
+        let command = parse_command(input, &bump);
         assert_eq!(command, None);
     }
 
     #[test]
     fn test_empty_word() {
+        let bump = Bump::new();
+
         let input = "echo ";
-        let command = parse_command(input).expect("Failed to parse command");
+        let command = parse_command(input, &bump).expect("Failed to parse command");
 
         assert_eq!(command.argv, vec![Arg::Word("echo".to_string())]);
         assert!(command.pipe_to.is_none());
@@ -320,8 +355,10 @@ mod tests {
 
     #[test]
     fn test_multiple_spaces_between_words() {
+        let bump = Bump::new();
+
         let input = "echo    hello   world";
-        let command = parse_command(input).expect("Failed to parse command");
+        let command = parse_command(input, &bump).expect("Failed to parse command");
 
         assert_eq!(
             command.argv,
@@ -335,8 +372,10 @@ mod tests {
 
     #[test]
     fn test_multiple_redirections_same_type() {
+        let bump = Bump::new();
+
         let input = "echo hello > output.txt > another_output.txt";
-        let command = parse_command(input).expect("Failed to parse command");
+        let command = parse_command(input, &bump).expect("Failed to parse command");
 
         assert_eq!(
             command.argv,
@@ -363,8 +402,10 @@ mod tests {
 
     #[test]
     fn test_redirection_with_pipe() {
+        let bump = Bump::new();
+
         let input = "echo hello > output.txt | grep world";
-        let command = parse_command(input).expect("Failed to parse command");
+        let command = parse_command(input, &bump).expect("Failed to parse command");
 
         assert_eq!(
             command.argv,
@@ -386,7 +427,7 @@ mod tests {
             command.pipe_to,
             Some(PipeTo {
                 pipe_type: RedirType::Stdout,
-                target: Box::new(Command {
+                target: BumpaloBox::new_in(Command {
                     argv: vec![
                         Arg::Word("grep".to_string()),
                         Arg::Word("world".to_string())
@@ -394,15 +435,17 @@ mod tests {
                     pipe_to: None,
                     redirect_to: Vec::new(),
                     and_then: None,
-                })
+                }, &bump)
             })
         );
     }
 
     #[test]
     fn test_redirection_with_and_then() {
+        let bump = Bump::new();
+
         let input = "echo hello > output.txt && echo world";
-        let command = parse_command(input).expect("Failed to parse command");
+        let command = parse_command(input, &bump).expect("Failed to parse command");
 
         assert_eq!(
             command.argv,
@@ -423,7 +466,7 @@ mod tests {
         assert_eq!(
             command.and_then,
             Some(AndThen {
-                target: Box::new(Command {
+                target: BumpaloBox::new_in(Command {
                     argv: vec![
                         Arg::Word("echo".to_string()),
                         Arg::Word("world".to_string())
@@ -431,7 +474,7 @@ mod tests {
                     pipe_to: None,
                     redirect_to: Vec::new(),
                     and_then: None,
-                }),
+                }, &bump),
                 conditional: true
             })
         );
@@ -439,8 +482,10 @@ mod tests {
 
     #[test]
     fn test_variable_in_subshell() {
+        let bump = Bump::new();
+
         let input = "echo $(echo $USER)";
-        let command = parse_command(input).expect("Failed to parse command");
+        let command = parse_command(input, &bump).expect("Failed to parse command");
 
         assert_eq!(
             command.argv,
@@ -461,8 +506,10 @@ mod tests {
 
     #[test]
     fn test_subshell_with_redirection() {
+        let bump = Bump::new();
+
         let input = "echo $(ls) > output.txt";
-        let command = parse_command(input).expect("Failed to parse command");
+        let command = parse_command(input, &bump).expect("Failed to parse command");
 
         assert_eq!(
             command.argv,
@@ -488,22 +535,28 @@ mod tests {
 
     #[test]
     fn test_unclosed_quotes() {
+        let bump = Bump::new();
+
         let input = "echo \"hello";
-        let command = parse_command(input);
+        let command = parse_command(input, &bump);
         assert_eq!(command, None);
     }
 
     #[test]
     fn test_subshell_missing_closing_paren() {
+        let bump = Bump::new();
+
         let input = "echo $(ls";
-        let command = parse_command(input);
+        let command = parse_command(input, &bump);
         assert_eq!(command, None);
     }
 
     #[test]
     fn test_and_then_with_pipe() {
+        let bump = Bump::new();
+
         let input = "echo hello && echo world | grep test";
-        let command = parse_command(input).expect("Failed to parse command");
+        let command = parse_command(input, &bump).expect("Failed to parse command");
 
         assert_eq!(
             command.argv,
@@ -516,14 +569,14 @@ mod tests {
         assert_eq!(
             command.and_then,
             Some(AndThen {
-                target: Box::new(Command {
+                target: BumpaloBox::new_in(Command {
                     argv: vec![
                         Arg::Word("echo".to_string()),
                         Arg::Word("world".to_string())
                     ],
                     pipe_to: Some(PipeTo {
                         pipe_type: RedirType::Stdout,
-                        target: Box::new(Command {
+                        target: BumpaloBox::new_in(Command {
                             argv: vec![
                                 Arg::Word("grep".to_string()),
                                 Arg::Word("test".to_string())
@@ -531,11 +584,11 @@ mod tests {
                             pipe_to: None,
                             redirect_to: Vec::new(),
                             and_then: None,
-                        })
+                        }, &bump)
                     }),
                     redirect_to: Vec::new(),
                     and_then: None,
-                }),
+                }, &bump),
                 conditional: true
             })
         );
@@ -543,8 +596,10 @@ mod tests {
 
     #[test]
     fn test_pipe_with_multiple_commands() {
+        let bump = Bump::new();
+
         let input = "echo hello | grep world | sort";
-        let command = parse_command(input).expect("Failed to parse command");
+        let command = parse_command(input, &bump).expect("Failed to parse command");
 
         assert_eq!(
             command.argv,
@@ -558,31 +613,33 @@ mod tests {
             command.pipe_to,
             Some(PipeTo {
                 pipe_type: RedirType::Stdout,
-                target: Box::new(Command {
+                target: BumpaloBox::new_in(Command {
                     argv: vec![
                         Arg::Word("grep".to_string()),
                         Arg::Word("world".to_string())
                     ],
                     pipe_to: Some(PipeTo {
                         pipe_type: RedirType::Stdout,
-                        target: Box::new(Command {
+                        target: BumpaloBox::new_in(Command {
                             argv: vec![Arg::Word("sort".to_string())],
                             pipe_to: None,
                             redirect_to: Vec::new(),
                             and_then: None,
-                        })
+                        }, &bump)
                     }),
                     redirect_to: Vec::new(),
                     and_then: None,
-                })
+                }, &bump)
             })
         );
     }
 
     #[test]
     fn test_empty_subshell() {
+        let bump = Bump::new();
+
         let input = "echo $(echo)";
-        let command = parse_command(input).expect("Failed to parse command");
+        let command = parse_command(input, &bump).expect("Failed to parse command");
 
         assert_eq!(
             command.argv,

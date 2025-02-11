@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 use std::{hint::unreachable_unchecked, iter::Peekable};
+use bumpalo::boxed::Box as BumpaloBox;
+use bumpalo::Bump;
 
 use crate::lexer::{Lexer, Token};
 
@@ -26,10 +28,10 @@ impl ParseErrors {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Arg {
+pub enum Arg<'bump> {
     Word(String),
     Variable(String),
-    Subshell(Command),
+    Subshell(Command<'bump>),
 }
 
 #[derive(Debug)]
@@ -38,23 +40,23 @@ pub struct Parser<I: Iterator<Item = Result<Token, ParseError>>> {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Command {
-    pub argv: Vec<Arg>,
-    pub pipe_to: Option<PipeTo>,
+pub struct Command<'bump> {
+    pub argv: Vec<Arg<'bump>>,
+    pub pipe_to: Option<PipeTo<'bump>>,
     pub redirect_to: Vec<FileRedir>,
-    pub and_then: Option<AndThen>,
+    pub and_then: Option<AndThen<'bump>>,
 }
 
 #[derive(Debug, PartialEq)]
-pub struct PipeTo {
+pub struct PipeTo<'bump> {
     pub pipe_type: RedirType,
-    pub target: Box<Command>,
+    pub target: BumpaloBox<'bump, Command<'bump>>,
 }
 
 #[derive(Debug, PartialEq)]
-pub struct AndThen {
+pub struct AndThen<'bump> {
     pub conditional: bool,
-    pub target: Box<Command>,
+    pub target: BumpaloBox<'bump, Command<'bump>>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -94,7 +96,7 @@ impl<I: Iterator<Item = Result<Token, ParseError>>> Parser<I> {
         }
     }
 
-    fn parse_command(&mut self) -> Result<Command, ParseErrors> {
+    fn parse_command<'bump>(&mut self, bump: &'bump Bump) -> Result<Command<'bump>, ParseErrors> {
         let mut errors = Vec::new();
         let mut argv = Vec::new();
         let mut pipe_to = None;
@@ -119,11 +121,11 @@ impl<I: Iterator<Item = Result<Token, ParseError>>> Parser<I> {
                     pipe_token if matches!(pipe_token, Token::Pipe | Token::PipeBoth) => {
                         let pipe_type: RedirType = pipe_token.try_into().unwrap();
 
-                        match self.parse_command() {
+                        match self.parse_command(bump) {
                             Ok(next_command) => {
                                 pipe_to = Some(PipeTo {
                                     pipe_type,
-                                    target: Box::new(next_command),
+                                    target: BumpaloBox::new_in(next_command, bump),
                                 });
                             }
                             Err(errs) => {
@@ -133,10 +135,10 @@ impl<I: Iterator<Item = Result<Token, ParseError>>> Parser<I> {
                         break;
                     }
                     Token::AndThen => {
-                        match self.parse_command() {
+                        match self.parse_command(bump) {
                             Ok(next_command) => {
                                 and_then = Some(AndThen {
-                                    target: Box::new(next_command),
+                                    target: BumpaloBox::new_in(next_command, bump),
                                     conditional: false,
                                 });
                             }
@@ -147,10 +149,10 @@ impl<I: Iterator<Item = Result<Token, ParseError>>> Parser<I> {
                         break;
                     }
                     Token::AndThenIf => {
-                        match self.parse_command() {
+                        match self.parse_command(bump) {
                             Ok(next_command) => {
                                 and_then = Some(AndThen {
-                                    target: Box::new(next_command),
+                                    target: BumpaloBox::new_in(next_command, bump),
                                     conditional: true,
                                 });
                             }
@@ -161,7 +163,7 @@ impl<I: Iterator<Item = Result<Token, ParseError>>> Parser<I> {
                         break;
                     }
                     Token::SubShell(command) => {
-                        match Command::parse(command) {
+                        match Command::parse(command, bump) {
                             Ok(command) => argv.push(Arg::Subshell(command)),
                             Err(errs) => errors.extend(errs.into_iter()),
                         }
@@ -202,10 +204,10 @@ impl<I: Iterator<Item = Result<Token, ParseError>>> Parser<I> {
     }
 }
 
-impl Command {
-    pub fn parse(input: impl AsRef<str>) -> Result<Self, ParseErrors> {
+impl<'bump> Command<'bump> {
+    pub fn parse(input: impl AsRef<str>, bump: &'bump Bump) -> Result<Self, ParseErrors> {
         let lexer = Lexer::new(input.as_ref());
         let mut parser = Parser::new(lexer);
-        parser.parse_command()
+        parser.parse_command(bump)
     }
 }
