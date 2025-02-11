@@ -1,5 +1,6 @@
 mod lexer;
 mod parser;
+mod safe_wrappers;
 
 #[cfg(test)]
 mod tests;
@@ -9,7 +10,7 @@ use std::io::{self, Write};
 use parser::Command;
 
 fn main() {
-    // Input REPL loop
+    // Input REPL
     let stdin = io::stdin();
     let mut stdout = io::stdout();
     loop {
