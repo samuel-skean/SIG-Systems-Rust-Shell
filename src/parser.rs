@@ -19,9 +19,21 @@ pub struct ParseErrors {
     errors: Vec<ParseError>,
 }
 
-impl ParseErrors {
-    fn into_iter(self) -> impl Iterator<Item = ParseError> {
+impl IntoIterator for ParseErrors {
+    type Item = ParseError;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
         self.errors.into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a ParseErrors {
+    type Item = &'a ParseError;
+    type IntoIter = std::slice::Iter<'a, ParseError>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        (&self.errors).into_iter()
     }
 }
 
@@ -127,7 +139,7 @@ impl<I: Iterator<Item = Result<Token, ParseError>>> Parser<I> {
                                 });
                             }
                             Err(errs) => {
-                                errors.extend(errs.into_iter());
+                                errors.extend(errs);
                             }
                         }
                         break;
@@ -141,7 +153,7 @@ impl<I: Iterator<Item = Result<Token, ParseError>>> Parser<I> {
                                 });
                             }
                             Err(errs) => {
-                                errors.extend(errs.into_iter());
+                                errors.extend(errs);
                             }
                         }
                         break;
@@ -155,7 +167,7 @@ impl<I: Iterator<Item = Result<Token, ParseError>>> Parser<I> {
                                 });
                             }
                             Err(errs) => {
-                                errors.extend(errs.into_iter());
+                                errors.extend(errs);
                             }
                         }
                         break;
@@ -163,7 +175,7 @@ impl<I: Iterator<Item = Result<Token, ParseError>>> Parser<I> {
                     Token::SubShell(command) => {
                         match Command::parse(command) {
                             Ok(command) => argv.push(Arg::Subshell(command)),
-                            Err(errs) => errors.extend(errs.into_iter()),
+                            Err(errs) => errors.extend(errs),
                         }
                     }
                     Token::Variable(s) => {
