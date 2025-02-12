@@ -6,7 +6,7 @@ mod tests {
 
     
     
-    use bumpalo::{boxed::Box as BumpaloBox, Bump};
+    use bumpalo::{boxed::Box as BumpaloBox, collections::vec::Vec as BumpaloVec, Bump};
 
     use crate::parser::*;
 
@@ -24,7 +24,8 @@ mod tests {
 
         assert_eq!(
             command.argv,
-            vec![
+            bumpalo::vec![
+                in &bump;
                 Arg::Word("echo".to_string()),
                 Arg::Word("hello".to_string())
             ]
@@ -40,12 +41,14 @@ mod tests {
 
         assert_eq!(
             command.argv,
-            vec![
+            bumpalo::vec![
+                in &bump;
                 Arg::Word("echo".to_string()),
                 Arg::Subshell(Command {
-                    argv: vec![Arg::Word("ls".to_string()), Arg::Word("-l".to_string())],
+                    argv: bumpalo::vec![
+                            in &bump; Arg::Word("ls".to_string()), Arg::Word("-l".to_string())],
                     pipe_to: None,
-                    redirect_to: Vec::new(),
+                    redirect_to: BumpaloVec::new_in(&bump),
                     and_then: None,
                 })
             ]
@@ -61,7 +64,8 @@ mod tests {
 
         assert_eq!(
             command.argv,
-            vec![
+            bumpalo::vec![
+                in &bump;
                 Arg::Word("echo".to_string()),
                 Arg::Variable("HOME".to_string())
             ]
@@ -77,7 +81,8 @@ mod tests {
 
         assert_eq!(
             command.argv,
-            vec![
+            bumpalo::vec![
+                in &bump;
                 Arg::Word("echo".to_string()),
                 Arg::Word("hello".to_string())
             ]
@@ -85,7 +90,8 @@ mod tests {
 
         assert_eq!(
             command.redirect_to,
-            vec![FileRedir {
+            bumpalo::vec![
+                in &bump; FileRedir {
                 redirect_type: RedirType::Stdout,
                 target: PathBuf::from("output.txt")
             }]
@@ -101,7 +107,8 @@ mod tests {
 
         assert_eq!(
             command.argv,
-            vec![
+            bumpalo::vec![
+                in &bump;
                 Arg::Word("echo".to_string()),
                 Arg::Word("hello".to_string())
             ]
@@ -109,7 +116,8 @@ mod tests {
 
         assert_eq!(
             command.redirect_to,
-            vec![FileRedir {
+            bumpalo::vec![
+                in &bump; FileRedir {
                 redirect_type: RedirType::Stderr,
                 target: PathBuf::from("error.txt")
             }]
@@ -125,7 +133,8 @@ mod tests {
 
         assert_eq!(
             command.argv,
-            vec![
+            bumpalo::vec![
+                in &bump;
                 Arg::Word("echo".to_string()),
                 Arg::Word("hello".to_string())
             ]
@@ -133,7 +142,8 @@ mod tests {
 
         assert_eq!(
             command.redirect_to,
-            vec![FileRedir {
+            bumpalo::vec![
+                in &bump; FileRedir {
                 redirect_type: RedirType::Both,
                 target: PathBuf::from("output.txt")
             }]
@@ -149,7 +159,8 @@ mod tests {
 
         assert_eq!(
             command.argv,
-            vec![
+            bumpalo::vec![
+                in &bump;
                 Arg::Word("echo".to_string()),
                 Arg::Word("hello".to_string())
             ]
@@ -160,12 +171,13 @@ mod tests {
             Some(PipeTo {
                 pipe_type: RedirType::Stdout,
                 target: BumpaloBox::new_in(Command {
-                    argv: vec![
+                    argv: bumpalo::vec![
+                            in &bump;
                         Arg::Word("grep".to_string()),
                         Arg::Word("world".to_string())
                     ],
                     pipe_to: None,
-                    redirect_to: Vec::new(),
+                    redirect_to: BumpaloVec::new_in(&bump),
                     and_then: None,
                 }, &bump)
             })
@@ -181,7 +193,8 @@ mod tests {
 
         assert_eq!(
             command.argv,
-            vec![
+            bumpalo::vec![
+                in &bump;
                 Arg::Word("echo".to_string()),
                 Arg::Word("hello".to_string())
             ]
@@ -192,12 +205,13 @@ mod tests {
             Some(PipeTo {
                 pipe_type: RedirType::Both,
                 target: BumpaloBox::new_in(Command {
-                    argv: vec![
+                    argv: bumpalo::vec![
+                            in &bump;
                         Arg::Word("grep".to_string()),
                         Arg::Word("world".to_string())
                     ],
                     pipe_to: None,
-                    redirect_to: Vec::new(),
+                    redirect_to: BumpaloVec::new_in(&bump),
                     and_then: None,
                 }, &bump)
             })
@@ -213,7 +227,8 @@ mod tests {
 
         assert_eq!(
             command.argv,
-            vec![
+            bumpalo::vec![
+                in &bump;
                 Arg::Word("echo".to_string()),
                 Arg::Word("hello".to_string())
             ]
@@ -223,12 +238,13 @@ mod tests {
             command.and_then,
             Some(AndThen {
                 target: BumpaloBox::new_in(Command {
-                    argv: vec![
+                    argv: bumpalo::vec![
+                            in &bump;
                         Arg::Word("echo".to_string()),
                         Arg::Word("world".to_string())
                     ],
                     pipe_to: None,
-                    redirect_to: Vec::new(),
+                    redirect_to: BumpaloVec::new_in(&bump),
                     and_then: None,
                 }, &bump),
                 conditional: true
@@ -245,7 +261,8 @@ mod tests {
 
         assert_eq!(
             command.argv,
-            vec![
+            bumpalo::vec![
+                in &bump;
                 Arg::Word("echo".to_string()),
                 Arg::Word("hello".to_string())
             ]
@@ -255,12 +272,13 @@ mod tests {
             command.and_then,
             Some(AndThen {
                 target: BumpaloBox::new_in(Command {
-                    argv: vec![
+                    argv: bumpalo::vec![
+                            in &bump;
                         Arg::Word("echo".to_string()),
                         Arg::Word("world".to_string())
                     ],
                     pipe_to: None,
-                    redirect_to: Vec::new(),
+                    redirect_to: BumpaloVec::new_in(&bump),
                     and_then: None,
                 }, &bump),
                 conditional: false
@@ -295,7 +313,8 @@ mod tests {
 
         assert_eq!(
             command.argv,
-            vec![
+            bumpalo::vec![
+                in &bump;
                 Arg::Word("echo".to_string()),
                 Arg::Word("hello".to_string())
             ]
@@ -303,7 +322,8 @@ mod tests {
 
         assert_eq!(
             command.redirect_to,
-            vec![
+            bumpalo::vec![
+                in &bump;
                 FileRedir {
                     redirect_type: RedirType::Stdout,
                     target: PathBuf::from("out.txt")
@@ -325,7 +345,8 @@ mod tests {
 
         assert_eq!(
             command.argv,
-            vec![
+            bumpalo::vec![
+                in &bump;
                 Arg::Word("echo".to_string()),
                 Arg::Variable("HOME_VAR".to_string())
             ]
@@ -348,7 +369,8 @@ mod tests {
         let input = "echo ";
         let command = parse_command(input, &bump).expect("Failed to parse command");
 
-        assert_eq!(command.argv, vec![Arg::Word("echo".to_string())]);
+        assert_eq!(command.argv, bumpalo::vec![
+                    in &bump; Arg::Word("echo".to_string())]);
         assert!(command.pipe_to.is_none());
         assert!(command.redirect_to.is_empty());
     }
@@ -362,7 +384,8 @@ mod tests {
 
         assert_eq!(
             command.argv,
-            vec![
+            bumpalo::vec![
+                in &bump;
                 Arg::Word("echo".to_string()),
                 Arg::Word("hello".to_string()),
                 Arg::Word("world".to_string())
@@ -379,7 +402,8 @@ mod tests {
 
         assert_eq!(
             command.argv,
-            vec![
+            bumpalo::vec![
+                in &bump;
                 Arg::Word("echo".to_string()),
                 Arg::Word("hello".to_string())
             ]
@@ -387,7 +411,8 @@ mod tests {
 
         assert_eq!(
             command.redirect_to,
-            vec![
+            bumpalo::vec![
+                in &bump;
                 FileRedir {
                     redirect_type: RedirType::Stdout,
                     target: PathBuf::from("output.txt")
@@ -409,7 +434,8 @@ mod tests {
 
         assert_eq!(
             command.argv,
-            vec![
+            bumpalo::vec![
+                in &bump;
                 Arg::Word("echo".to_string()),
                 Arg::Word("hello".to_string())
             ]
@@ -417,7 +443,8 @@ mod tests {
 
         assert_eq!(
             command.redirect_to,
-            vec![FileRedir {
+            bumpalo::vec![
+                in &bump; FileRedir {
                 redirect_type: RedirType::Stdout,
                 target: PathBuf::from("output.txt")
             }]
@@ -428,12 +455,13 @@ mod tests {
             Some(PipeTo {
                 pipe_type: RedirType::Stdout,
                 target: BumpaloBox::new_in(Command {
-                    argv: vec![
+                    argv: bumpalo::vec![
+                            in &bump;
                         Arg::Word("grep".to_string()),
                         Arg::Word("world".to_string())
                     ],
                     pipe_to: None,
-                    redirect_to: Vec::new(),
+                    redirect_to: BumpaloVec::new_in(&bump),
                     and_then: None,
                 }, &bump)
             })
@@ -449,7 +477,8 @@ mod tests {
 
         assert_eq!(
             command.argv,
-            vec![
+            bumpalo::vec![
+                in &bump;
                 Arg::Word("echo".to_string()),
                 Arg::Word("hello".to_string())
             ]
@@ -457,7 +486,8 @@ mod tests {
 
         assert_eq!(
             command.redirect_to,
-            vec![FileRedir {
+            bumpalo::vec![
+                in &bump; FileRedir {
                 redirect_type: RedirType::Stdout,
                 target: PathBuf::from("output.txt")
             }]
@@ -467,12 +497,13 @@ mod tests {
             command.and_then,
             Some(AndThen {
                 target: BumpaloBox::new_in(Command {
-                    argv: vec![
+                    argv: bumpalo::vec![
+                            in &bump;
                         Arg::Word("echo".to_string()),
                         Arg::Word("world".to_string())
                     ],
                     pipe_to: None,
-                    redirect_to: Vec::new(),
+                    redirect_to: BumpaloVec::new_in(&bump),
                     and_then: None,
                 }, &bump),
                 conditional: true
@@ -489,15 +520,17 @@ mod tests {
 
         assert_eq!(
             command.argv,
-            vec![
+            bumpalo::vec![
+                in &bump;
                 Arg::Word("echo".to_string()),
                 Arg::Subshell(Command {
-                    argv: vec![
+                    argv: bumpalo::vec![
+                            in &bump;
                         Arg::Word("echo".to_string()),
                         Arg::Variable("USER".to_string())
                     ],
                     pipe_to: None,
-                    redirect_to: Vec::new(),
+                    redirect_to: BumpaloVec::new_in(&bump),
                     and_then: None,
                 })
             ]
@@ -513,12 +546,14 @@ mod tests {
 
         assert_eq!(
             command.argv,
-            vec![
+            bumpalo::vec![
+                in &bump;
                 Arg::Word("echo".to_string()),
                 Arg::Subshell(Command {
-                    argv: vec![Arg::Word("ls".to_string())],
+                    argv: bumpalo::vec![
+                            in &bump; Arg::Word("ls".to_string())],
                     pipe_to: None,
-                    redirect_to: Vec::new(),
+                    redirect_to: BumpaloVec::new_in(&bump),
                     and_then: None,
                 })
             ]
@@ -526,7 +561,8 @@ mod tests {
 
         assert_eq!(
             command.redirect_to,
-            vec![FileRedir {
+            bumpalo::vec![
+                in &bump; FileRedir {
                 redirect_type: RedirType::Stdout,
                 target: PathBuf::from("output.txt")
             }]
@@ -560,7 +596,8 @@ mod tests {
 
         assert_eq!(
             command.argv,
-            vec![
+            bumpalo::vec![
+                in &bump;
                 Arg::Word("echo".to_string()),
                 Arg::Word("hello".to_string())
             ]
@@ -570,23 +607,25 @@ mod tests {
             command.and_then,
             Some(AndThen {
                 target: BumpaloBox::new_in(Command {
-                    argv: vec![
+                    argv: bumpalo::vec![
+                            in &bump;
                         Arg::Word("echo".to_string()),
                         Arg::Word("world".to_string())
                     ],
                     pipe_to: Some(PipeTo {
                         pipe_type: RedirType::Stdout,
                         target: BumpaloBox::new_in(Command {
-                            argv: vec![
+                            argv: bumpalo::vec![
+                                    in &bump;
                                 Arg::Word("grep".to_string()),
                                 Arg::Word("test".to_string())
                             ],
                             pipe_to: None,
-                            redirect_to: Vec::new(),
+                            redirect_to: BumpaloVec::new_in(&bump),
                             and_then: None,
                         }, &bump)
                     }),
-                    redirect_to: Vec::new(),
+                    redirect_to: BumpaloVec::new_in(&bump),
                     and_then: None,
                 }, &bump),
                 conditional: true
@@ -603,7 +642,8 @@ mod tests {
 
         assert_eq!(
             command.argv,
-            vec![
+            bumpalo::vec![
+                in &bump;
                 Arg::Word("echo".to_string()),
                 Arg::Word("hello".to_string())
             ]
@@ -614,20 +654,22 @@ mod tests {
             Some(PipeTo {
                 pipe_type: RedirType::Stdout,
                 target: BumpaloBox::new_in(Command {
-                    argv: vec![
+                    argv: bumpalo::vec![
+                            in &bump;
                         Arg::Word("grep".to_string()),
                         Arg::Word("world".to_string())
                     ],
                     pipe_to: Some(PipeTo {
                         pipe_type: RedirType::Stdout,
                         target: BumpaloBox::new_in(Command {
-                            argv: vec![Arg::Word("sort".to_string())],
+                            argv: bumpalo::vec![
+                                    in &bump; Arg::Word("sort".to_string())],
                             pipe_to: None,
-                            redirect_to: Vec::new(),
+                            redirect_to: BumpaloVec::new_in(&bump),
                             and_then: None,
                         }, &bump)
                     }),
-                    redirect_to: Vec::new(),
+                    redirect_to: BumpaloVec::new_in(&bump),
                     and_then: None,
                 }, &bump)
             })
@@ -643,12 +685,14 @@ mod tests {
 
         assert_eq!(
             command.argv,
-            vec![
+            bumpalo::vec![
+                in &bump;
                 Arg::Word("echo".to_string()),
                 Arg::Subshell(Command {
-                    argv: vec![Arg::Word("echo".to_string())],
+                    argv: bumpalo::vec![
+                            in &bump; Arg::Word("echo".to_string())],
                     pipe_to: None,
-                    redirect_to: Vec::new(),
+                    redirect_to: BumpaloVec::new_in(&bump),
                     and_then: None,
                 })
             ]

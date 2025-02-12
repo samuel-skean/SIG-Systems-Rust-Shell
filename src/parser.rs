@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::{hint::unreachable_unchecked, iter::Peekable};
 use bumpalo::boxed::Box as BumpaloBox;
+use bumpalo::collections::vec::Vec as BumpaloVec;
 use bumpalo::Bump;
 
 use crate::lexer::{Lexer, Token};
@@ -17,12 +18,12 @@ pub enum ParseError {
 }
 
 #[derive(Debug)]
-pub struct ParseErrors {
-    errors: Vec<ParseError>,
+pub struct ParseErrors<'bump> {
+    errors: BumpaloVec<'bump, ParseError>,
 }
 
-impl ParseErrors {
-    fn into_iter(self) -> impl Iterator<Item = ParseError> {
+impl<'bump> ParseErrors<'bump> {
+    fn into_iter(self) -> impl Iterator<Item = ParseError> + 'bump {
         self.errors.into_iter()
     }
 }
@@ -41,9 +42,9 @@ pub struct Parser<I: Iterator<Item = Result<Token, ParseError>>> {
 
 #[derive(Debug, PartialEq)]
 pub struct Command<'bump> {
-    pub argv: Vec<Arg<'bump>>,
+    pub argv: BumpaloVec<'bump, Arg<'bump>>,
     pub pipe_to: Option<PipeTo<'bump>>,
-    pub redirect_to: Vec<FileRedir>,
+    pub redirect_to: BumpaloVec<'bump, FileRedir>,
     pub and_then: Option<AndThen<'bump>>,
 }
 
@@ -96,11 +97,11 @@ impl<I: Iterator<Item = Result<Token, ParseError>>> Parser<I> {
         }
     }
 
-    fn parse_command<'bump>(&mut self, bump: &'bump Bump) -> Result<Command<'bump>, ParseErrors> {
-        let mut errors = Vec::new();
-        let mut argv = Vec::new();
+    fn parse_command<'bump>(&mut self, bump: &'bump Bump) -> Result<Command<'bump>, ParseErrors<'bump>> {
+        let mut errors = BumpaloVec::new_in(&bump);
+        let mut argv = BumpaloVec::new_in(&bump);
         let mut pipe_to = None;
-        let mut redirect_to = Vec::new();
+        let mut redirect_to = BumpaloVec::new_in(&bump);
         let mut and_then = None;
 
         while let Some(token_res) = self.tokens.next() {
@@ -183,7 +184,7 @@ impl<I: Iterator<Item = Result<Token, ParseError>>> Parser<I> {
         }
 
         if !errors.is_empty() || argv.is_empty() {
-            Err(ParseErrors { errors })
+            Err(ParseErrors::<'bump> { errors })
         } else {
             Ok(Command {
                 argv,
@@ -205,7 +206,7 @@ impl<I: Iterator<Item = Result<Token, ParseError>>> Parser<I> {
 }
 
 impl<'bump> Command<'bump> {
-    pub fn parse(input: impl AsRef<str>, bump: &'bump Bump) -> Result<Self, ParseErrors> {
+    pub fn parse(input: impl AsRef<str>, bump: &'bump Bump) -> Result<Self, ParseErrors<'bump>> {
         let lexer = Lexer::new(input.as_ref());
         let mut parser = Parser::new(lexer);
         parser.parse_command(bump)

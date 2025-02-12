@@ -4,5 +4,5 @@ version = "0.0.1"
 edition = "2021"
 
 [dependencies]
-bumpalo = { version = "3.17.0", features = ["boxed"] }
+bumpalo = { version = "3.17.0", features = ["boxed", "collections"] }
 libc = "0.2.169"
