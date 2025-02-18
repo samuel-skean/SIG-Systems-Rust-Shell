@@ -26,7 +26,7 @@ pub(crate) fn fork() -> IOResult<ForkReturn> {
     }
 }
 
-pub(crate) fn execve<S: AsRef<str>>(pathname: &S, argv: &[S]) -> IOResult<()> {
+pub(crate) fn exec<S: AsRef<str>>(pathname: &S, argv: &[S]) -> IOResult<()> {
     let pathname = CString::new(pathname.as_ref()).map_err(|_| IOError::new(IOErrorKind::InvalidInput, "BAD: pathname str had a null byte."))?;
 
     // Store our CStrings
@@ -42,7 +42,7 @@ pub(crate) fn execve<S: AsRef<str>>(pathname: &S, argv: &[S]) -> IOResult<()> {
         .collect::<Vec<_>>();
     argv_ptrs.push(std::ptr::null());
 
-    if unsafe { libc::execve(pathname.as_ptr(), argv_ptrs.as_ptr(), environ) } < 0 {
+    if unsafe { libc::execvpe(pathname.as_ptr(), argv_ptrs.as_ptr(), environ) } < 0 {
         Err(IOError::last_os_error())
     } else {
         unsafe {
