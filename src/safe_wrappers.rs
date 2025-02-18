@@ -5,7 +5,7 @@ unsafe extern "C" {
     static environ: *const *const c_char;
 }
 
-enum ForkReturn {
+pub enum ForkReturn {
     Parent(pid_t),
     Child,
 }
@@ -26,7 +26,7 @@ pub(crate) fn fork() -> IOResult<ForkReturn> {
     }
 }
 
-pub(crate) fn exec<S: AsRef<str>>(pathname: &S, argv: &[S]) -> IOResult<()> {
+pub(crate) fn exec<S: AsRef<str>>(pathname: &S, argv: &[&S]) -> IOResult<()> {
     let pathname = CString::new(pathname.as_ref()).map_err(|_| IOError::new(IOErrorKind::InvalidInput, "BAD: pathname str had a null byte."))?;
 
     // Store our CStrings
@@ -48,5 +48,47 @@ pub(crate) fn exec<S: AsRef<str>>(pathname: &S, argv: &[S]) -> IOResult<()> {
         unsafe {
             std::hint::unreachable_unchecked();
         }
+    }
+}
+
+pub(crate) struct WaitReturn {
+    pid: pid_t,
+    status: WaitStatus,
+}
+
+pub(crate) enum WaitStatus {
+    Exited(i32),
+    TermSignal(i32),
+    Stopped(i32),
+    Continued,
+    Unknown
+}
+
+pub(crate) fn wait() -> IOResult<WaitReturn> {
+    use WaitStatus as WS;
+    use libc::{WIFEXITED, WEXITSTATUS, WIFSIGNALED, WTERMSIG, WIFSTOPPED, WSTOPSIG, WIFCONTINUED};
+
+    let mut stat_code = 0i32;
+
+    let res = unsafe { libc::wait(&raw mut stat_code) };
+
+    if res < 0 {
+        Err(IOError::last_os_error())
+    } else {
+        let pid = res;
+
+        let status = if WIFEXITED(stat_code) {
+            WS::Exited(WEXITSTATUS(stat_code))
+        } else if WIFSIGNALED(stat_code) {
+            WS::TermSignal(WTERMSIG(stat_code))
+        } else if WIFSTOPPED(stat_code) {
+            WS::Stopped(WSTOPSIG(stat_code))
+        } else if WIFCONTINUED(stat_code) {
+            WS::Continued
+        } else {
+            WS::Unknown
+        };
+
+        Ok(WaitReturn{pid, status})
     }
 }
