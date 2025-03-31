@@ -33,7 +33,7 @@ impl<'a> IntoIterator for &'a ParseErrors {
     type IntoIter = std::slice::Iter<'a, ParseError>;
 
     fn into_iter(self) -> Self::IntoIter {
-        (&self.errors).into_iter()
+        self.errors.iter()
     }
 }
 

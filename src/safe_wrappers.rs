@@ -1,5 +1,5 @@
-use libc::{pid_t, c_char};
-use std::{ffi::{CStr, CString}, io::{Error as IOError, ErrorKind as IOErrorKind, Result as IOResult}};
+use libc::{c_char, c_int, pid_t};
+use std::{ffi::CString, io, os::fd::{AsRawFd, RawFd}};
 
 unsafe extern "C" {
     static environ: *const *const c_char;
@@ -10,24 +10,20 @@ pub enum ForkReturn {
     Child,
 }
 
-pub(crate) fn fork() -> IOResult<ForkReturn> {
+pub(crate) fn fork() -> io::Result<ForkReturn> {
     let res = unsafe { libc::fork() };
 
     // TODO: Use `assert!` (or `assert_eq!`) here to make sure we only have one thread
 
-    if res < 0 {
-        Err(IOError::last_os_error())
-    } else {
-         if res == 0 {
-            Ok(ForkReturn::Child)
-         } else {
-            Ok(ForkReturn::Parent(res))
-         }
+    match res {
+        ..0 => Err(io::Error::last_os_error()),
+        0 => Ok(ForkReturn::Child),
+        _ => Ok(ForkReturn::Parent(res)),
     }
 }
 
-pub(crate) fn exec<S: AsRef<str>>(pathname: &S, argv: &[&S]) -> IOResult<()> {
-    let pathname = CString::new(pathname.as_ref()).map_err(|_| IOError::new(IOErrorKind::InvalidInput, "BAD: pathname str had a null byte."))?;
+pub(crate) fn exec<S: AsRef<str>>(pathname: &S, argv: &[&S]) -> io::Result<()> {
+    let pathname = CString::new(pathname.as_ref()).map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "BAD: pathname str had a null byte."))?;
 
     // Store our CStrings
     let argv = argv
@@ -43,7 +39,7 @@ pub(crate) fn exec<S: AsRef<str>>(pathname: &S, argv: &[&S]) -> IOResult<()> {
     argv_ptrs.push(std::ptr::null());
 
     if unsafe { libc::execvpe(pathname.as_ptr(), argv_ptrs.as_ptr(), environ) } < 0 {
-        Err(IOError::last_os_error())
+        Err(io::Error::last_os_error())
     } else {
         unsafe {
             std::hint::unreachable_unchecked();
@@ -64,7 +60,7 @@ pub(crate) enum WaitStatus {
     Unknown
 }
 
-pub(crate) fn wait() -> IOResult<WaitReturn> {
+pub(crate) fn wait() -> io::Result<WaitReturn> {
     use WaitStatus as WS;
     use libc::{WIFEXITED, WEXITSTATUS, WIFSIGNALED, WTERMSIG, WIFSTOPPED, WSTOPSIG, WIFCONTINUED};
 
@@ -73,7 +69,7 @@ pub(crate) fn wait() -> IOResult<WaitReturn> {
     let res = unsafe { libc::wait(&raw mut stat_code) };
 
     if res < 0 {
-        Err(IOError::last_os_error())
+        Err(io::Error::last_os_error())
     } else {
         let pid = res;
 
@@ -90,5 +86,38 @@ pub(crate) fn wait() -> IOResult<WaitReturn> {
         };
 
         Ok(WaitReturn{pid, status})
+    }
+}
+
+pub struct Pipe {
+    pub read_fd: RawFd,
+    pub write_fd: RawFd,
+}
+pub(crate) fn pipe() -> io::Result<Pipe> {
+    let mut pipe_fds: [c_int; 2] = [0; 2];
+
+    if unsafe { libc::pipe(pipe_fds.as_mut_ptr()) } < 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(Pipe{
+            read_fd: pipe_fds[0],
+            write_fd: pipe_fds[1],
+        })
+    }
+}
+
+pub(crate) fn dup2<F: AsRawFd>(oldfd: F, newfd: F) -> io::Result<()> {
+    if unsafe { libc::dup2(oldfd.as_raw_fd(), newfd.as_raw_fd()) } < 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+pub(crate) fn close<F: AsRawFd>(fd: F) -> io::Result<()> {
+    if unsafe { libc::close(fd.as_raw_fd()) } < 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
     }
 }
