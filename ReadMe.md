@@ -19,3 +19,18 @@ This shell is the [UIC ACM](https://acmuic.org/)'s SIG Systems' first project!
 5. Write a brief description of what your code changes do.
 6. Press the "Create pull request" button.
 7. Watch your email for updates!
+
+# TODO Items
+- [x] Lexing
+- [x] Parsing (to `Command` type)
+  - [x] Parsing test module
+- [x] Command-running
+- [x] Command-piping
+  - [x] Recursive command piping (any number of pipes)
+- [ ] Process groups
+  - Both for proper signal handling and for proper waiting
+- [ ] Command substitution
+- [ ] File redirection
+- [ ] Command chaining
+- [ ] Variable setting
+    - [ ] Variable expansion
