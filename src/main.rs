@@ -54,6 +54,7 @@ fn run_command(cmd: &Command, read_from: Option<RawFd>) -> io::Result<()> {
 
                 if let Some(read_from) = read_from {
                     dup2(read_from, libc::STDIN_FILENO)?;
+                    close(read_from)?;
                 }
 
                 match pipe_to.pipe_type {
@@ -64,6 +65,7 @@ fn run_command(cmd: &Command, read_from: Option<RawFd>) -> io::Result<()> {
                         dup2(pipe.write_fd, libc::STDERR_FILENO)?;
                     },
                 }
+                close(pipe.write_fd)?;
 
                 if let Err(e) = exec(args[0], args.as_slice()) {
                     eprintln!("Error running {}: {e}", args[0]);
@@ -88,6 +90,7 @@ fn run_command(cmd: &Command, read_from: Option<RawFd>) -> io::Result<()> {
 
         if let Some(read_from) = read_from {
             dup2(read_from, libc::STDIN_FILENO)?;
+            close(read_from)?;
         }
 
         if let Err(e) = exec(args[0], args.as_slice()) {
